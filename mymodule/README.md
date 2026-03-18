@@ -1,0 +1,3 @@
+# mymodule
+
+A box module.

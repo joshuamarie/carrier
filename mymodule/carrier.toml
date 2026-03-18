@@ -1,0 +1,15 @@
+[module]
+name = "mymodule"
+version = "0.1.0"
+description = ""
+authors = []
+license = "Unknown"
+r_version = "4.0.0"
+
+[dependencies]
+packages = []
+modules = []
+
+[test]
+framework = "testthat"
+dir = "tests"
