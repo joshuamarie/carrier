@@ -6,6 +6,16 @@ A module manager for [`{box}`](https://klmr.me/box/) modules.
 
 `carrier` lets `box` modules bundled as `.rmbx` files, install them, and make the modules much more easily distributed. This is similar to Python's `pip` or `npm`.
 
+## Installation
+
+Pre-built binaries for Linux, macOS, and Windows will be available on the [Releases](https://github.com/joshuamarie/carrier/releases) page once the project reaches a stable release.
+
+To install the development version of `carrier` from GitHub, one requires [Rust](https://www.rust-lang.org/tools/install) (stable toolchain), particularly `rustc` and `cargo` on your system to compile it from source.
+
+``` bash
+cargo install --git https://github.com/joshuamarie/carrier
+```
+
 ## Requirements
 
 The idea for a distributable module is simple. Similar to Python, the usual structure of `box` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.R` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from R works.  
