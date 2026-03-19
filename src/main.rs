@@ -30,26 +30,31 @@ enum Commands {
         name: String,
     },
 
-    /// Bundle a module directory into .mod/<name>.rmbx
+    /// Bundle a module into <name>.rmbx
     Bundle {
-        /// Path to the module directory (e.g. ./play or play)
+        /// This hasn't finalized yet
+        /// Usually, the path to the module directory (e.g. ./play or play)
         path: String,
 
-        /// Overwrite existing bundle
+        /// `carrier bundle` allows overwrite existing bundle
+        /// Follow it with `--force`
+        /// Also hasn't finalized
         #[arg(long)]
         force: bool,
     },
 
-    /// Install a module from a local path or GitHub (gh:user/repo)
+    /// Install a module from a local `.rmbx` package or GitHub (gh:user/repo)
     Install {
-        /// Module source: a local path or gh:username/repo
+        /// The argument is THE module source
         source: String,
 
-        /// Overwrite if already installed
+        /// Also allows overwriting if already installed
         #[arg(long)]
         force: bool,
 
-        /// Install to ~/.carrier/modules/ instead of project .mod/
+        /// The package after installation is intended to be placed to the following:
+        /// The global (e.g. ~/.carrier/modules/)
+        /// Through local project .mod/
         #[arg(long)]
         global: bool,
     },
