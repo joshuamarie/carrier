@@ -33,6 +33,7 @@ pub struct TestConfig {
     pub dir: Option<String>,
 }
 
+/// Every modules to be installed with `carrier` requires `carrier.toml` metadata
 /// Use `from_dir` to read and parse a `carrier.toml` from a module directory.
 /// We have `default_template` to auto-generate the default `carrier.toml` content for a new module.
 impl CarrierToml {
