@@ -10,7 +10,6 @@ use crate::manifest::Manifest;
 
 const MANIFEST_FILENAME: &str = "manifest.json";
 
-/// Pack a module directory into a `.rmbx` archive.
 pub fn bundle(module_path: &Path, output_path: &Path, manifest: &Manifest) -> Result<()> {
     let file = File::create(output_path)
         .with_context(|| format!("Failed to create: {}", output_path.display()))?;
@@ -18,13 +17,11 @@ pub fn bundle(module_path: &Path, output_path: &Path, manifest: &Manifest) -> Re
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default();
 
-    // Write manifest.json first
     zip.start_file(MANIFEST_FILENAME, options)
         .context("Failed to write manifest entry")?;
     zip.write_all(manifest.to_json()?.as_bytes())
         .context("Failed to write manifest content")?;
 
-    // Write every file, preserving relative paths
     for entry in all_files(module_path) {
         let rel = entry
             .strip_prefix(module_path)
@@ -101,7 +98,6 @@ pub fn read_manifest(rmbx_path: &Path) -> Result<Manifest> {
     read_manifest_from_archive(&mut archive)
 }
 
-/// Collect relative paths of all files in a module directory.
 pub fn collect_r_files(module_path: &Path) -> Result<Vec<String>> {
     all_files(module_path)
         .iter()
@@ -112,8 +108,6 @@ pub fn collect_r_files(module_path: &Path) -> Result<Vec<String>> {
         })
         .collect()
 }
-
-// ── internal helpers ────────────────────────────────────────────────────────
 
 /// Collect all files recursively, excluding hidden files/dirs (e.g. .git)
 fn all_files(module_path: &Path) -> Vec<PathBuf> {
