@@ -5,46 +5,47 @@ use serde::{Deserialize, Serialize};
 /// Mirrors the fields from the module's `carrier.toml`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Manifest {
-    pub name:         String,
-    pub version:      String,
-    pub description:  String,
-    pub authors:      Vec<String>,
-    pub license:      String,
-    pub r_version:    String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub authors: Vec<String>,
+    pub license: String,
+    pub r_version: String,
     pub dependencies: Dependencies,
-    pub files:        Vec<String>,
-    pub bundled_at:   String,
+    pub files: Vec<String>,
+    pub bundled_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Dependencies {
-    /// R packages required (e.g. ["dplyr", "stringr"])
+    /// Every 'box' modules uses R packages
+    /// Write R package deps through e.g. ["dplyr", "stringr"])
     pub packages: Vec<String>,
-    /// Other carrier modules required (e.g. ["utils/helpers"])
-    pub modules:  Vec<String>,
+    /// Then other carrier modules required (e.g. ["utils/helpers"])
+    pub modules: Vec<String>,
 }
 
 impl Manifest {
     pub fn new(
-        name:         impl Into<String>,
-        version:      impl Into<String>,
-        description:  impl Into<String>,
-        authors:      Vec<String>,
-        license:      impl Into<String>,
-        r_version:    impl Into<String>,
+        name: impl Into<String>,
+        version: impl Into<String>,
+        description: impl Into<String>,
+        authors: Vec<String>,
+        license: impl Into<String>,
+        r_version: impl Into<String>,
         dependencies: Dependencies,
-        files:        Vec<String>,
+        files: Vec<String>,
     ) -> Self {
         Self {
-            name:        name.into(),
-            version:     version.into(),
+            name: name.into(),
+            version: version.into(),
             description: description.into(),
             authors,
-            license:     license.into(),
-            r_version:   r_version.into(),
+            license: license.into(),
+            r_version: r_version.into(),
             dependencies,
             files,
-            bundled_at:  Utc::now().to_rfc3339(),
+            bundled_at: Utc::now().to_rfc3339(),
         }
     }
 
