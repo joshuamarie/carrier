@@ -84,7 +84,7 @@ fn main() {
             commands::install::run(InstallArgs { source, force, global })
         }
         Commands::Remove { name, force } => {
-            commands::remove::run(RemoveArgs { name, force })
+            commands::remove::exec(RemoveArgs { name, force })
         }
     };
 
