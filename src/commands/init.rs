@@ -61,12 +61,18 @@ pub fn run(args: InitArgs) -> Result<()> {
     )
     .context("Failed to write README.md")?;
 
+    let files = [
+        "carrier.toml",
+        "__init__.R",
+        "md/__init__.R",
+        "md/hello.R",
+        "README.md",
+    ];
+    
     println!("Initialized module '{}'", args.name);
-    println!("  {}/carrier.toml", args.name);
-    println!("  {}/__init__.R", args.name);
-    println!("  {}/md/__init__.R", args.name);
-    println!("  {}/md/hello.R", args.name);
-    println!("  {}/README.md", args.name);
+    for file in &files {
+        println!("  {}/{}", args.name, file);
+    }
 
     Ok(())
 }
