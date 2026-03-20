@@ -2,11 +2,11 @@ use anyhow::{bail, Context, Result};
 use std::io::{self, Write};
 
 pub struct RemoveArgs {
-    pub name:  String,
+    pub name: String,
     pub force: bool,
 }
 
-pub fn run(args: RemoveArgs) -> Result<()> {
+pub fn exec(args: RemoveArgs) -> Result<()> {
     let mod_dir = std::env::current_dir()
         .context("Failed to get current working directory")?
         .join(".mod");
