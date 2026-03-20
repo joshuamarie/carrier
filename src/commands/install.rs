@@ -7,13 +7,16 @@ use crate::formats::rmbx;
 
 pub struct InstallArgs {
     pub source: String,
-    pub force:  bool,
+    pub force: bool,
     pub global: bool,
 }
 
 enum InstallSource {
     Rmbx(PathBuf),
-    GitHub { user: String, repo: String },
+    GitHub { 
+        user: String, 
+        repo: String
+    },
 }
 
 pub fn run(args: InstallArgs) -> Result<()> {
