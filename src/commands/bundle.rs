@@ -6,7 +6,7 @@ use crate::formats::rmbx;
 use crate::manifest::{Dependencies, Manifest};
 
 pub struct BundleArgs {
-    pub path:  String,
+    pub path: String,
     pub force: bool,
 }
 
@@ -33,7 +33,7 @@ pub fn run(args: BundleArgs) -> Result<()> {
     let deps = toml.dependencies.unwrap_or_default();
     let dependencies = Dependencies {
         packages: deps.packages.unwrap_or_default(),
-        modules:  deps.modules.unwrap_or_default(),
+        modules: deps.modules.unwrap_or_default(),
     };
 
     let manifest = Manifest::new(
