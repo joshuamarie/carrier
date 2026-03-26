@@ -21,13 +21,14 @@ cargo install --git https://github.com/joshuamarie/carrier
 The idea for a distributable module is simple. Similar to Python, the usual structure of `box` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.R` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from R works.  
 
 ```
-<module>/
+<some-dir-name>/
 ├── carrier.toml   
-├── __init__.R    
 ├── README.md
-└── <submodule>/
+└── <module-name>/
     ├── __init__.R
-    └── hello.R
+    └── <submod>/
+        ├── __init__.R
+        └── example.R
 ```
 
 ## How it works
@@ -45,26 +46,26 @@ The idea for a distributable module is simple. Similar to Python, the usual stru
 2.  Bundle the module from the top of the directory with:
 
     ``` bash
-    carrier bundle <name-of-the-module>
+    carrier bundle .
     ```
 
 3.  Either install the module after bundling it:
 
     ``` bash
-    carrier install <name-of-the-module>.rmbx
+    carrier install <name-of-the-module>.tar.gz
     ```
     
     or install the module from a GitHub repo:
 
     ``` bash
-    carrier bundle gh:username/<name-of-the-module>
+    carrier install gh:username/<name-of-the-module>
     ```
     
-    By default, it installs the module, locally, but you can install the module globally:
+    <!-- By default, it installs the module, locally, but you can install the module globally: -->
 
-    ``` bash
-    carrier install <name-of-the-module>.rmbx --global
-    ```
+    <!-- ``` bash -->
+    <!-- carrier install <name-of-the-module>.rmbx --global -->
+    <!-- ``` -->
 
 4.  Remove the installed module
 
