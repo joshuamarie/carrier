@@ -20,6 +20,8 @@ cargo install --git https://github.com/joshuamarie/carrier
 
 The idea for a distributable module is simple. Similar to Python, the usual structure of `box` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.R` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from R works.  
 
+Here's the usual structure of the module: 
+
 ```
 <some-dir-name>/
 ├── carrier.toml   
@@ -70,7 +72,7 @@ The idea for a distributable module is simple. Similar to Python, the usual stru
 4.  Remove the installed module
 
     ``` bash
-    carrier remove gh:username/<name-of-the-module>
+    carrier remove <name-of-the-module>
     ```
 
 ## Using installed modules
