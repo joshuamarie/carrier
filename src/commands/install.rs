@@ -3,19 +3,20 @@ use std::fs::File;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
-use crate::formats::rmbx;
+use ::tar::Archive as TarArchive;
+use crate::formats::{rmbx, tar};
+use crate::paths::resolve_install_dir;
 
 pub struct InstallArgs {
     pub source: String,
-    pub force: bool,
-    pub global: bool,
 }
 
 enum InstallSource {
     Rmbx(PathBuf),
-    GitHub { 
-        user: String, 
-        repo: String
+    Tar(PathBuf),
+    GitHub {
+        user: String,
+        repo: String,
     },
 }
 
@@ -23,11 +24,10 @@ pub fn run(args: InstallArgs) -> Result<()> {
     let source = parse_source(&args.source)?;
 
     match source {
-        InstallSource::Rmbx(path) => {
-            install_from_rmbx(&path, args.force, args.global)
-        }
+        InstallSource::Rmbx(path) => install_from_rmbx(&path),
+        InstallSource::Tar(path) => install_from_tar(&path),
         InstallSource::GitHub { user, repo } => {
-            install_from_github(&user, &repo, args.force, args.global)
+            install_from_github(&user, &repo)
         }
     }
 }
@@ -38,37 +38,24 @@ fn parse_source(s: &str) -> Result<InstallSource> {
         if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
             bail!("Invalid GitHub source '{}'. Expected: gh:username/repo", s);
         }
-        Ok(InstallSource::GitHub {
+        return Ok(InstallSource::GitHub {
             user: parts[0].to_owned(),
             repo: parts[1].to_owned(),
-        })
-    } else {
-        let path = PathBuf::from(s);
-        match path.extension().and_then(|e| e.to_str()) {
-            Some("rmbx") => Ok(InstallSource::Rmbx(path)),
-            _ => bail!(
-                "Expected a .rmbx file or gh:username/repo, got '{}'.\n\
-                 To bundle your own module, use `carrier bundle` instead.",
-                s
-            ),
-        }
+        });
+    }
+
+    let path = PathBuf::from(s);
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("rmbx") => Ok(InstallSource::Rmbx(path)),
+        Some("gz") => Ok(InstallSource::Tar(path)),
+        _ => bail!(
+            "Expected a .tar.gz, .rmbx, or gh:username/repo — got '{}'.",
+            s
+        ),
     }
 }
 
-fn resolve_mod_dir(global: bool) -> Result<PathBuf> {
-    if global {
-        Ok(dirs::home_dir()
-            .context("Cannot find home directory")?
-            .join(".carrier")
-            .join("modules"))
-    } else {
-        Ok(std::env::current_dir()
-            .context("Failed to get current working directory")?
-            .join(".mod"))
-    }
-}
-
-fn install_from_rmbx(rmbx_path: &PathBuf, force: bool, global: bool) -> Result<()> {
+fn install_from_rmbx(rmbx_path: &PathBuf) -> Result<()> {
     if !rmbx_path.exists() {
         bail!("File not found: {}", rmbx_path.display());
     }
@@ -76,33 +63,62 @@ fn install_from_rmbx(rmbx_path: &PathBuf, force: bool, global: bool) -> Result<(
     let manifest = rmbx::read_manifest(rmbx_path)
         .with_context(|| format!("Failed to read manifest from {}", rmbx_path.display()))?;
 
-    let mod_dir = resolve_mod_dir(global)?;
-    let output_path = mod_dir.join(&manifest.name);
+    let install_dir = resolve_install_dir()?;
+    let output_path = install_dir.join(&manifest.name);
 
-    if output_path.exists() && !force {
-        bail!(
-            "Module '{}' is already installed. Use --force to reinstall.",
-            manifest.name
-        );
-    }
+    std::fs::create_dir_all(&install_dir)
+        .context("Failed to create install directory")?;
 
     if output_path.exists() {
         std::fs::remove_dir_all(&output_path)
             .with_context(|| format!("Failed to remove existing: {}", output_path.display()))?;
     }
 
-    std::fs::create_dir_all(&output_path)
-        .context("Failed to create install directory")?;
-
-    rmbx::unpack(rmbx_path, &output_path)
+    rmbx::unpack(rmbx_path, &install_dir)
         .with_context(|| format!("Failed to unpack {}", rmbx_path.display()))?;
 
-    println!("Installed '{}' -> {}", manifest.name, output_path.display());
+    println!(
+        "Installed '{}' ({}) -> {}",
+        manifest.name,
+        manifest.version,
+        output_path.display()
+    );
 
     Ok(())
 }
 
-fn install_from_github(user: &str, repo: &str, force: bool, global: bool) -> Result<()> {
+fn install_from_tar(tar_path: &PathBuf) -> Result<()> {
+    if !tar_path.exists() {
+        bail!("File not found: {}", tar_path.display());
+    }
+
+    let name = tar::read_name(tar_path)
+        .with_context(|| format!("Failed to read carrier.toml from {}", tar_path.display()))?;
+
+    let install_dir = resolve_install_dir()?;
+    let output_path = install_dir.join(&name);
+
+    std::fs::create_dir_all(&install_dir)
+        .context("Failed to create install directory")?;
+
+    if output_path.exists() {
+        std::fs::remove_dir_all(&output_path)
+            .with_context(|| format!("Failed to remove existing: {}", output_path.display()))?;
+    }
+
+    tar::unpack(tar_path, &install_dir)
+        .with_context(|| format!("Failed to unpack {}", tar_path.display()))?;
+
+    println!(
+        "Installed '{}' -> {}",
+        name,
+        output_path.display()
+    );
+
+    Ok(())
+}
+
+fn install_from_github(user: &str, repo: &str) -> Result<()> {
     let url = format!("https://api.github.com/repos/{}/{}/tarball", user, repo);
 
     println!("Fetching {}/{}...", user, repo);
@@ -120,10 +136,10 @@ fn install_from_github(user: &str, repo: &str, force: bool, global: bool) -> Res
     extract_tarball(&tarball_path, &extract_dir)
         .context("Failed to extract tarball")?;
 
-    let module_path = find_single_subdir(&extract_dir)
+    let project_root = find_single_subdir(&extract_dir)
         .context("Could not find module directory in downloaded archive")?;
 
-    if !module_path.join("carrier.toml").exists() {
+    if !project_root.join("carrier.toml").exists() {
         bail!(
             "No carrier.toml found in {}/{}. \
              This repository is not a carrier module.",
@@ -131,12 +147,12 @@ fn install_from_github(user: &str, repo: &str, force: bool, global: bool) -> Res
         );
     }
 
-    let rmbx_path = tmp.path().join(format!("{}.rmbx", repo));
+    let output_path = tmp.path().join(format!("{}.tar.gz", repo));
 
-    crate::commands::bundle::bundle_to(&module_path, &rmbx_path)
+    crate::commands::bundle::bundle_to(&project_root, &output_path, false)
         .context("Failed to bundle downloaded module")?;
 
-    install_from_rmbx(&rmbx_path, force, global)
+    install_from_tar(&output_path)
 }
 
 fn download_file(url: &str, dest: &PathBuf) -> Result<()> {
@@ -162,7 +178,7 @@ fn extract_tarball(tarball_path: &PathBuf, dest: &PathBuf) -> Result<()> {
         .with_context(|| format!("Failed to open: {}", tarball_path.display()))?;
 
     let gz = flate2::read::GzDecoder::new(file);
-    let mut archive = tar::Archive::new(gz);
+    let mut archive = TarArchive::new(gz);
 
     archive
         .unpack(dest)
