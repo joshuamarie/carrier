@@ -2,6 +2,7 @@ mod carrier_toml;
 mod commands;
 mod formats;
 mod manifest;
+mod paths;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -28,38 +29,30 @@ enum Commands {
     Init {
         /// Name of the module to create
         name: String,
+
+        /// Override the project directory name.
+        /// Defaults to <name>-proj if not specified.
+        #[arg(long)]
+        dir_name: Option<String>,
     },
 
-    /// Bundle a module into <name>.rmbx
+    /// Bundle a module into <name>_<version>.tar.gz (default) or .rmbx
     Bundle {
-        /// This hasn't finalized yet
-        /// Usually, the path to the module directory (e.g. ./play or play)
+        /// Path to the project root (e.g. `.` or `./my-project`)
         path: String,
 
-        /// `carrier bundle` allows overwrite existing bundle
-        /// Follow it with `--force`
-        /// Also hasn't finalized
+        /// Bundle as .rmbx instead of the default .tar.gz
         #[arg(long)]
-        force: bool,
+        rmbx: bool,
     },
 
-    /// Install a module from a local `.rmbx` package or GitHub (gh:user/repo)
+    /// Install a module from a .tar.gz, .rmbx, or GitHub (gh:user/repo)
     Install {
-        /// The argument is THE module source
+        /// The module source
         source: String,
-
-        /// Also allows overwriting if already installed
-        #[arg(long)]
-        force: bool,
-
-        /// The package after installation is intended to be placed to the following:
-        /// The global (e.g. ~/.carrier/modules/)
-        /// Through local project .mod/
-        #[arg(long)]
-        global: bool,
     },
 
-    /// Remove an installed module from .mod/
+    /// Remove an installed module
     Remove {
         /// Name of the module to remove
         name: String,
@@ -74,14 +67,14 @@ fn main() {
     let cli = Cli::parse();
 
     let result: Result<()> = match cli.command {
-        Commands::Init { name } => {
-            commands::init::run(InitArgs { name })
+        Commands::Init { name, dir_name } => {
+            commands::init::run(InitArgs { name, dir_name })
         }
-        Commands::Bundle { path, force } => {
-            commands::bundle::run(BundleArgs { path, force })
+        Commands::Bundle { path, rmbx } => {
+            commands::bundle::run(BundleArgs { path, rmbx })
         }
-        Commands::Install { source, force, global } => {
-            commands::install::run(InstallArgs { source, force, global })
+        Commands::Install { source } => {
+            commands::install::run(InstallArgs { source })
         }
         Commands::Remove { name, force } => {
             commands::remove::exec(RemoveArgs { name, force })
