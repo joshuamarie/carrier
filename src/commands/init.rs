@@ -6,45 +6,65 @@ use crate::carrier_toml::CarrierToml;
 
 pub struct InitArgs {
     pub name: String,
+    pub dir_name: Option<String>,
 }
 
 pub fn run(args: InitArgs) -> Result<()> {
-    let module_path = PathBuf::from(&args.name);
+    // Project root is either --dir-name or <name>-proj by default
+    let default_dir = format!("{}-proj", args.name);
+    let project_dir_name = args.dir_name
+        .as_deref()
+        .unwrap_or(&default_dir);
 
-    if module_path.exists() {
-        bail!("'{}' already exists.", module_path.display());
+    let project_root = PathBuf::from(project_dir_name);
+
+    if project_root.exists() {
+        bail!("'{}' already exists.", project_root.display());
     }
 
-    // carrier.toml
-    fs::create_dir_all(&module_path)
-        .with_context(|| format!("Failed to create directory: {}", module_path.display()))?;
+    // --- Project root ---
+    fs::create_dir_all(&project_root)
+        .with_context(|| format!("Failed to create directory: {}", project_root.display()))?;
+
+    // carrier.toml at project root
     fs::write(
-        module_path.join("carrier.toml"),
+        project_root.join("carrier.toml"),
         CarrierToml::default_template(&args.name),
     )
     .context("Failed to write carrier.toml")?;
 
-    // __init__.R — module entry point
-    // explicitly re-exports from the md/ submodule
+    // README.md at project root
     fs::write(
-        module_path.join("__init__.R"),
+        project_root.join("README.md"),
+        format!("# {}\n\nA box module.\n", args.name),
+    )
+    .context("Failed to write README.md")?;
+
+    // --- Source folder: <project_root>/<name>/ ---
+    let src_dir = project_root.join(&args.name);
+    fs::create_dir_all(&src_dir)
+        .with_context(|| format!("Failed to create source directory: {}", src_dir.display()))?;
+
+    // <name>/__init__.R — module entry point
+    fs::write(
+        src_dir.join("__init__.R"),
         "#' @export\nbox::use(./md)\n",
     )
     .context("Failed to write __init__.R")?;
 
-    // md/__init__.R — submodule entry point
-    let md_dir = module_path.join("md");
+    // --- <name>/md/ submodule ---
+    let md_dir = src_dir.join("md");
     fs::create_dir_all(&md_dir)
         .context("Failed to create md/ directory")?;
+
+    // <name>/md/__init__.R
     fs::write(
         md_dir.join("__init__.R"),
-        format!(
-            "#' @export\nbox::use(./hello)\n",
-        ),
+        "#' @export\nbox::use(./hello)\n",
     )
     .context("Failed to write md/__init__.R")?;
 
-    // md/hello.R — stub implementation
+    // <name>/md/hello.R — stub implementation
     fs::write(
         md_dir.join("hello.R"),
         format!(
@@ -52,26 +72,19 @@ pub fn run(args: InitArgs) -> Result<()> {
             args.name
         ),
     )
-    .context("Failed to write md/hello.R")?;
-
-    // README.md
-    fs::write(
-        module_path.join("README.md"),
-        format!("# {}\n\nA box module.\n", args.name),
-    )
-    .context("Failed to write README.md")?;
+    .context("Failed to write hello.R")?;
 
     let files = [
         "carrier.toml",
-        "__init__.R",
-        "md/__init__.R",
-        "md/hello.R",
         "README.md",
+        &format!("{n}/__init__.R", n = args.name),
+        &format!("{n}/md/__init__.R", n = args.name),
+        &format!("{n}/md/hello.R", n = args.name),
     ];
-    
-    println!("Initialized module '{}'", args.name);
-    for file in &files {
-        println!("  {}/{}", args.name, file);
+
+    println!("Initialized module '{}' in '{}'", args.name, project_dir_name);
+    for f in &files {
+        println!("  {}/", f);
     }
 
     Ok(())
