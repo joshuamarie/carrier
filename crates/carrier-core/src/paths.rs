@@ -1,26 +1,24 @@
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-const RENV_DIR: &str = "renv";
-const RENV_CARRIER_DIR: &str = "carrier";
+const CARRIER_LIB_ENV: &str = "CARRIER_LIB";
 const CARRIER_DIR: &str = ".carrier";
 const MODULES_DIR: &str = "modules";
 
-/// Resolves the carrier install directory based on the current environment.
+/// Resolves the carrier install directory.
 ///
 /// Priority:
-///   1. `renv/carrier/` — if renv is active in CWD
+///   1. `CARRIER_LIB` environment variable — explicit override
+///      Works with any isolation tool (renv, pak, groundhog, etc.)
 ///   2. `~/.carrier/modules/` — global fallback
 ///
 /// Only resolves the path — does NOT create directories.
 /// Callers are responsible for creating the directory if needed.
 pub fn resolve_install_dir() -> Result<PathBuf> {
-    let cwd = std::env::current_dir()
-        .context("Failed to get current working directory")?;
-
-    let renv_dir = cwd.join(RENV_DIR);
-    if renv_dir.exists() {
-        return Ok(renv_dir.join(RENV_CARRIER_DIR));
+    if let Ok(lib) = std::env::var(CARRIER_LIB_ENV) {
+        if !lib.is_empty() {
+            return Ok(PathBuf::from(lib));
+        }
     }
 
     let global = dirs::home_dir()

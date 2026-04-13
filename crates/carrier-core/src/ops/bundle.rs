@@ -5,13 +5,8 @@ use crate::carrier_toml::CarrierToml;
 use crate::formats::{rmbx, tar};
 use crate::manifest::{Dependencies, Manifest};
 
-pub struct BundleArgs {
-    pub path: String,
-    pub rmbx: bool,
-}
-
-pub fn run(args: BundleArgs) -> Result<()> {
-    let project_root = PathBuf::from(&args.path);
+pub fn run(path: &str, use_rmbx: bool) -> Result<()> {
+    let project_root = PathBuf::from(path);
 
     if !project_root.exists() {
         bail!("Path does not exist: {}", project_root.display());
@@ -23,17 +18,15 @@ pub fn run(args: BundleArgs) -> Result<()> {
     let toml = CarrierToml::from_dir(&project_root)?;
     let src_path = toml.resolve_src_dir(&project_root)?;
     let meta = &toml.module;
-
     let manifest = build_manifest(&toml, &src_path)?;
 
-    // Output goes to CWD, named <name>_<version>.<ext>
     let cwd = std::env::current_dir()
         .context("Failed to get current working directory")?;
 
-    let ext = if args.rmbx { "rmbx" } else { "tar.gz" };
+    let ext = if use_rmbx { "rmbx" } else { "tar.gz" };
     let output_path = cwd.join(format!("{}_{}.{}", meta.name, meta.version, ext));
 
-    if args.rmbx {
+    if use_rmbx {
         rmbx::bundle(&src_path, &project_root, &output_path, &manifest)
             .with_context(|| format!("Failed to bundle: {}", src_path.display()))?;
     } else {
@@ -52,20 +45,18 @@ pub fn run(args: BundleArgs) -> Result<()> {
 }
 
 /// Used by `install` when bundling a GitHub-downloaded module.
-pub fn bundle_to(project_root: &Path, output_path: &Path, rmbx: bool) -> Result<()> {
+pub fn bundle_to(project_root: &Path, output_path: &Path, use_rmbx: bool) -> Result<()> {
     let toml = CarrierToml::from_dir(project_root)?;
     let src_path = toml.resolve_src_dir(project_root)?;
-
     let manifest = build_manifest(&toml, &src_path)?;
 
-    if rmbx {
+    if use_rmbx {
         rmbx::bundle(&src_path, project_root, output_path, &manifest)
     } else {
         tar::bundle(&src_path, project_root, output_path, &manifest)
     }
 }
 
-/// Shared manifest construction from a parsed `carrier.toml` and resolved `src` path.
 fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
     let meta = &toml.module;
 

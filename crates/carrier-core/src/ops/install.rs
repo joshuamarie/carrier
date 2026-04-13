@@ -7,28 +7,17 @@ use ::tar::Archive as TarArchive;
 use crate::formats::{rmbx, tar};
 use crate::paths::resolve_install_dir;
 
-pub struct InstallArgs {
-    pub source: String,
-}
-
 enum InstallSource {
     Rmbx(PathBuf),
     Tar(PathBuf),
-    GitHub {
-        user: String,
-        repo: String,
-    },
+    GitHub { user: String, repo: String },
 }
 
-pub fn run(args: InstallArgs) -> Result<()> {
-    let source = parse_source(&args.source)?;
-
-    match source {
+pub fn run(source: &str) -> Result<()> {
+    match parse_source(source)? {
         InstallSource::Rmbx(path) => install_from_rmbx(&path),
-        InstallSource::Tar(path) => install_from_tar(&path),
-        InstallSource::GitHub { user, repo } => {
-            install_from_github(&user, &repo)
-        }
+        InstallSource::Tar(path)  => install_from_tar(&path),
+        InstallSource::GitHub { user, repo } => install_from_github(&user, &repo),
     }
 }
 
@@ -47,7 +36,7 @@ fn parse_source(s: &str) -> Result<InstallSource> {
     let path = PathBuf::from(s);
     match path.extension().and_then(|e| e.to_str()) {
         Some("rmbx") => Ok(InstallSource::Rmbx(path)),
-        Some("gz") => Ok(InstallSource::Tar(path)),
+        Some("gz")   => Ok(InstallSource::Tar(path)),
         _ => bail!(
             "Expected a .tar.gz, .rmbx, or gh:username/repo — got '{}'.",
             s
@@ -109,11 +98,7 @@ fn install_from_tar(tar_path: &PathBuf) -> Result<()> {
     tar::unpack(tar_path, &install_dir)
         .with_context(|| format!("Failed to unpack {}", tar_path.display()))?;
 
-    println!(
-        "Installed '{}' -> {}",
-        name,
-        output_path.display()
-    );
+    println!("Installed '{}' -> {}", name, output_path.display());
 
     Ok(())
 }
@@ -149,7 +134,7 @@ fn install_from_github(user: &str, repo: &str) -> Result<()> {
 
     let output_path = tmp.path().join(format!("{}.tar.gz", repo));
 
-    crate::commands::bundle::bundle_to(&project_root, &output_path, false)
+    crate::ops::bundle::bundle_to(&project_root, &output_path, false)
         .context("Failed to bundle downloaded module")?;
 
     install_from_tar(&output_path)

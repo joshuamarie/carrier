@@ -3,29 +3,24 @@ use std::io::{self, Write};
 
 use crate::paths::resolve_install_dir;
 
-pub struct RemoveArgs {
-    pub name: String,
-    pub force: bool,
-}
-
-pub fn exec(args: RemoveArgs) -> Result<()> {
+pub fn run(name: &str, force: bool) -> Result<()> {
     let install_dir = resolve_install_dir()
         .context("Failed to resolve install directory")?;
 
-    let module_path = install_dir.join(&args.name);
+    let module_path = install_dir.join(name);
 
     if !module_path.exists() {
         bail!(
             "Module '{}' is not installed ({} not found).",
-            args.name,
+            name,
             module_path.display()
         );
     }
 
-    if !args.force {
+    if !force {
         let confirmed = prompt_confirm(&format!(
             "Remove '{}'? This cannot be undone. [y/N] ",
-            args.name
+            name
         ))?;
 
         if !confirmed {
@@ -37,7 +32,7 @@ pub fn exec(args: RemoveArgs) -> Result<()> {
     std::fs::remove_dir_all(&module_path)
         .with_context(|| format!("Failed to remove: {}", module_path.display()))?;
 
-    println!("Removed '{}' from {}.", args.name, module_path.display());
+    println!("Removed '{}' from {}.", name, module_path.display());
 
     Ok(())
 }
