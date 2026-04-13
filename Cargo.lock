@@ -195,8 +195,16 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
- "chrono",
+ "carrier-core",
  "clap",
+]
+
+[[package]]
+name = "carrier-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
  "dirs",
  "flate2",
  "insta",
