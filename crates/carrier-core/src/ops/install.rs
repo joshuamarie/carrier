@@ -10,18 +10,26 @@ use crate::paths::resolve_install_dir;
 enum InstallSource {
     Rmbx(PathBuf),
     Tar(PathBuf),
+    Dir(PathBuf),
     GitHub { user: String, repo: String },
 }
 
 pub fn run(source: &str) -> Result<()> {
     match parse_source(source)? {
         InstallSource::Rmbx(path) => install_from_rmbx(&path),
-        InstallSource::Tar(path)  => install_from_tar(&path),
+        InstallSource::Tar(path) => install_from_tar(&path),
+        InstallSource::Dir(path) => install_from_dir(&path),
         InstallSource::GitHub { user, repo } => install_from_github(&user, &repo),
     }
 }
 
 fn parse_source(s: &str) -> Result<InstallSource> {
+    // Directory path — carrier install . or carrier install ./my-proj
+    let path = PathBuf::from(s);
+    if path.is_dir() {
+        return Ok(InstallSource::Dir(path));
+    }
+
     if let Some(rest) = s.strip_prefix("gh:") {
         let parts: Vec<&str> = rest.splitn(2, '/').collect();
         if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
@@ -33,12 +41,11 @@ fn parse_source(s: &str) -> Result<InstallSource> {
         });
     }
 
-    let path = PathBuf::from(s);
     match path.extension().and_then(|e| e.to_str()) {
         Some("rmbx") => Ok(InstallSource::Rmbx(path)),
         Some("gz")   => Ok(InstallSource::Tar(path)),
         _ => bail!(
-            "Expected a .tar.gz, .rmbx, or gh:username/repo — got '{}'.",
+            "Expected a directory, .tar.gz, .rmbx, or gh:username/repo — got '{}'.",
             s
         ),
     }
@@ -184,4 +191,22 @@ fn find_single_subdir(dir: &PathBuf) -> Result<PathBuf> {
         1 => Ok(entries.into_iter().next().unwrap().path()),
         _ => bail!("Expected one top-level directory in archive, found multiple"),
     }
+}
+
+fn install_from_dir(project_root: &PathBuf) -> Result<()> {
+    if !project_root.join("carrier.toml").exists() {
+        bail!(
+            "No carrier.toml found in {}. \
+             Is this a carrier module project?",
+            project_root.display()
+        );
+    }
+
+    let tmp = TempDir::new().context("Failed to create temp directory")?;
+    let output_path = tmp.path().join("module.tar.gz");
+
+    crate::ops::bundle::bundle_to(project_root, &output_path, false)
+        .context("Failed to bundle project")?;
+
+    install_from_tar(&output_path)
 }
