@@ -1,6 +1,6 @@
 #' @export
 box::use(
-    ./conversions[...],
+    cv = ./conversions[...],
     ./basic_mass,
     ./cross_system_mass,
     ./imperial_mass,
