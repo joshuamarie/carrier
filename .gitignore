@@ -1,2 +1,4 @@
 /target
 *.rmbx
+*.tar.gz
+.env

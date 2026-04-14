@@ -1,0 +1,54 @@
+name: "Build Windows"
+
+on:
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: "Build Windows (${{ matrix.this.target }})"
+    runs-on: ${{ matrix.this.runner }}
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        this:
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2022
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install rust toolchain"
+        run: |
+          rustup toolchain install
+          rustup show
+
+      - name: "Install rust target"
+        run: |
+          rustup target add ${{ matrix.this.target }}
+          rustup target list --installed
+
+      - name: "Build"
+        run: cargo build --release --locked --target ${{ matrix.this.target }} -p carrier
+
+      - name: "Archive"
+        shell: bash
+        run: |
+          TARGET=${{ matrix.this.target }}
+          ARCHIVE_NAME=carrier-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.zip
+          7z a $ARCHIVE_FILE ./target/$TARGET/release/carrier.exe
+          sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+
+      - name: "Upload"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.this.target }}
+          path: |
+            *.zip
+            *.sha256

@@ -1,0 +1,63 @@
+name: "Build Linux"
+
+on:
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: "Build Linux (${{ matrix.this.target }})"
+    runs-on: ${{ matrix.this.runner }}
+    timeout-minutes: 30
+    container: ${{ matrix.this.container }}
+
+    strategy:
+      matrix:
+        this:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+            container: quay.io/pypa/manylinux_2_28_x86_64
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            container: quay.io/pypa/manylinux_2_28_aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install rustup"
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: "Install rust toolchain"
+        run: |
+          rustup toolchain install
+          rustup show
+
+      - name: "Install rust target"
+        run: |
+          rustup target add ${{ matrix.this.target }}
+          rustup target list --installed
+
+      - name: "Build"
+        run: cargo build --release --locked --target ${{ matrix.this.target }} -p carrier
+
+      - name: "Archive"
+        run: |
+          TARGET=${{ matrix.this.target }}
+          ARCHIVE_NAME=carrier-$TARGET
+          ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
+          mkdir -p $ARCHIVE_NAME
+          cp target/$TARGET/release/carrier $ARCHIVE_NAME/carrier
+          tar czvf $ARCHIVE_FILE $ARCHIVE_NAME
+          sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+
+      - name: "Upload"
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.this.target }}
+          path: |
+            *.tar.gz
+            *.sha256
