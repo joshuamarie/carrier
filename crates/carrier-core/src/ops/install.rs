@@ -4,8 +4,11 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use ::tar::Archive as TarArchive;
+use crate::carrier_toml::{CarrierToml, TomlDependencies};
 use crate::formats::{rmbx, tar};
+use crate::ops::resolve;
 use crate::paths::resolve_install_dir;
+use crate::carrier_toml::DEFAULT_CRAN_MIRROR;
 
 enum InstallSource {
     Rmbx(PathBuf),
@@ -14,17 +17,16 @@ enum InstallSource {
     GitHub { user: String, repo: String },
 }
 
-pub fn run(source: &str) -> Result<()> {
+pub fn run(source: &str, install_deps: bool) -> Result<()> {
     match parse_source(source)? {
-        InstallSource::Rmbx(path) => install_from_rmbx(&path),
-        InstallSource::Tar(path) => install_from_tar(&path),
-        InstallSource::Dir(path) => install_from_dir(&path),
-        InstallSource::GitHub { user, repo } => install_from_github(&user, &repo),
+        InstallSource::Rmbx(path) => install_from_rmbx(&path, install_deps),
+        InstallSource::Tar(path) => install_from_tar(&path, install_deps),
+        InstallSource::Dir(path) => install_from_dir(&path, install_deps),
+        InstallSource::GitHub { user, repo } => install_from_github(&user, &repo, install_deps),
     }
 }
 
 fn parse_source(s: &str) -> Result<InstallSource> {
-    // Directory path — carrier install . or carrier install ./my-proj
     let path = PathBuf::from(s);
     if path.is_dir() {
         return Ok(InstallSource::Dir(path));
@@ -43,7 +45,7 @@ fn parse_source(s: &str) -> Result<InstallSource> {
 
     match path.extension().and_then(|e| e.to_str()) {
         Some("rmbx") => Ok(InstallSource::Rmbx(path)),
-        Some("gz")   => Ok(InstallSource::Tar(path)),
+        Some("gz") => Ok(InstallSource::Tar(path)),
         _ => bail!(
             "Expected a directory, .tar.gz, .rmbx, or gh:username/repo — got '{}'.",
             s
@@ -51,7 +53,33 @@ fn parse_source(s: &str) -> Result<InstallSource> {
     }
 }
 
-fn install_from_rmbx(rmbx_path: &PathBuf) -> Result<()> {
+fn read_deps_from_rmbx(path: &PathBuf) -> Result<TomlDependencies> {
+    let manifest = rmbx::read_manifest(path)?;
+    Ok(TomlDependencies {
+        packages: Some(
+            manifest.dependencies.packages
+                .into_iter()
+                .map(|name| (name, "*".to_owned()))
+                .collect()
+        ),
+        modules: Some(
+            manifest.dependencies.modules
+                .into_iter()
+                .map(|name| (name, "*".to_owned()))
+                .collect()
+        ),
+    })
+}
+
+fn read_deps_from_tar(path: &PathBuf) -> Result<TomlDependencies> {
+    Ok(tar::read_toml(path)?.dependencies.unwrap_or_default())
+}
+
+// fn read_deps_from_dir(path: &PathBuf) -> Result<TomlDependencies> {
+//     Ok(CarrierToml::from_dir(path)?.dependencies.unwrap_or_default())
+// }
+
+fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
     if !rmbx_path.exists() {
         bail!("File not found: {}", rmbx_path.display());
     }
@@ -75,21 +103,28 @@ fn install_from_rmbx(rmbx_path: &PathBuf) -> Result<()> {
 
     println!(
         "Installed '{}' ({}) -> {}",
-        manifest.name,
-        manifest.version,
-        output_path.display()
+        manifest.name, manifest.version, output_path.display()
     );
+
+    let deps = read_deps_from_rmbx(rmbx_path)?;
+    // let plan = resolve::resolve(&deps)?;
+    let plan = resolve::resolve(&deps, DEFAULT_CRAN_MIRROR)?;
+    println!("Dependencies:");
+    resolve::print_plan(&plan);
+    resolve::execute_plan(&plan, !install_deps)?;
 
     Ok(())
 }
 
-fn install_from_tar(tar_path: &PathBuf) -> Result<()> {
+fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<()> {
     if !tar_path.exists() {
         bail!("File not found: {}", tar_path.display());
     }
 
-    let name = tar::read_name(tar_path)
+    // read_toml replaces the old read_name — name is just one field
+    let toml = tar::read_toml(tar_path)
         .with_context(|| format!("Failed to read carrier.toml from {}", tar_path.display()))?;
+    let name = toml.module.name.clone();
 
     let install_dir = resolve_install_dir()?;
     let output_path = install_dir.join(&name);
@@ -107,12 +142,64 @@ fn install_from_tar(tar_path: &PathBuf) -> Result<()> {
 
     println!("Installed '{}' -> {}", name, output_path.display());
 
+    let deps = read_deps_from_tar(tar_path)?;
+    // let plan = resolve::resolve(&deps)?;
+    let plan = resolve::resolve(&deps, DEFAULT_CRAN_MIRROR)?;
+    println!("Dependencies:");
+    resolve::print_plan(&plan);
+    resolve::execute_plan(&plan, !install_deps)?;
+
     Ok(())
 }
 
-fn install_from_github(user: &str, repo: &str) -> Result<()> {
-    let url = format!("https://api.github.com/repos/{}/{}/tarball", user, repo);
+fn install_from_dir(project_root: &PathBuf, install_deps: bool) -> Result<()> {
+    if !project_root.join("carrier.toml").exists() {
+        bail!("No carrier.toml found in {}. Is this a carrier module project?", project_root.display());
+    }
 
+    let tmp = TempDir::new().context("Failed to create temp directory")?;
+    let output_path = tmp.path().join("module.tar.gz");
+
+    crate::ops::bundle::bundle_to(project_root, &output_path, false)
+        .context("Failed to bundle project")?;
+
+    install_from_tar(&output_path, install_deps)
+}
+
+// fn install_from_dir(project_root: &PathBuf) -> Result<()> {
+//     if !project_root.join("carrier.toml").exists() {
+//         bail!(
+//             "No carrier.toml found in {}. Is this a carrier module project?",
+//             project_root.display()
+//         );
+//     }
+// 
+//     // Resolve deps before bundling so errors surface early
+//     let deps = read_deps_from_dir(project_root)?;
+//     // let plan = resolve::resolve(&deps)?;
+//     let toml = CarrierToml::from_dir(project_root)?;
+//     let deps = toml.dependencies.clone().unwrap_or_default();
+//     let plan = resolve::resolve(&deps, toml.cran_url())?;
+// 
+//     let tmp = TempDir::new().context("Failed to create temp directory")?;
+//     let output_path = tmp.path().join("module.tar.gz");
+// 
+//     crate::ops::bundle::bundle_to(project_root, &output_path, false)
+//         .context("Failed to bundle project")?;
+// 
+//     install_from_tar(&output_path)?;
+// 
+//     // Print plan after install so the module name is already echoed above
+//     println!("Dependencies:");
+//     resolve::print_plan(&plan);
+//     resolve::execute_plan(&plan, !install_deps)?;
+// 
+//     Ok(())
+// }
+
+#[cfg(feature = "network")]
+fn install_from_github(user: &str, repo: &str, install_deps: bool) -> Result<()> {
+    let url = format!("https://api.github.com/repos/{}/{}/tarball", user, repo);
     println!("Fetching {}/{}...", user, repo);
 
     let tmp = TempDir::new().context("Failed to create temp directory")?;
@@ -139,14 +226,36 @@ fn install_from_github(user: &str, repo: &str) -> Result<()> {
         );
     }
 
-    let output_path = tmp.path().join(format!("{}.tar.gz", repo));
+    // Read deps from the extracted carrier.toml before bundling
+    // let deps = read_deps_from_dir(&project_root)?;
+    let toml = CarrierToml::from_dir(&project_root)?;
+    let deps = toml.dependencies.clone().unwrap_or_default();
+    let plan = resolve::resolve(&deps, toml.cran_url())?;
 
+    let output_path = tmp.path().join(format!("{}.tar.gz", repo));
     crate::ops::bundle::bundle_to(&project_root, &output_path, false)
         .context("Failed to bundle downloaded module")?;
 
-    install_from_tar(&output_path)
+    install_from_tar(&output_path, install_deps)?;
+
+    println!("Dependencies:");
+    resolve::print_plan(&plan);
+    resolve::execute_plan(&plan, !install_deps)?;
+
+    Ok(())
 }
 
+/// Stub for when the `network` feature is disabled — gives a clear error
+/// rather than a compile failure from the unresolved match arm.
+#[cfg(not(feature = "network"))]
+fn install_from_github(_user: &str, _repo: &str) -> Result<()> {
+    bail!(
+        "GitHub install requires the 'network' feature.\n\
+         Rebuild with: cargo build --features network"
+    )
+}
+
+#[cfg(feature = "network")]
 fn download_file(url: &str, dest: &PathBuf) -> Result<()> {
     let response = reqwest::blocking::Client::new()
         .get(url)
@@ -191,22 +300,4 @@ fn find_single_subdir(dir: &PathBuf) -> Result<PathBuf> {
         1 => Ok(entries.into_iter().next().unwrap().path()),
         _ => bail!("Expected one top-level directory in archive, found multiple"),
     }
-}
-
-fn install_from_dir(project_root: &PathBuf) -> Result<()> {
-    if !project_root.join("carrier.toml").exists() {
-        bail!(
-            "No carrier.toml found in {}. \
-             Is this a carrier module project?",
-            project_root.display()
-        );
-    }
-
-    let tmp = TempDir::new().context("Failed to create temp directory")?;
-    let output_path = tmp.path().join("module.tar.gz");
-
-    crate::ops::bundle::bundle_to(project_root, &output_path, false)
-        .context("Failed to bundle project")?;
-
-    install_from_tar(&output_path)
 }
