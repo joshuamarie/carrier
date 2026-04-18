@@ -9,9 +9,9 @@ name = "carrier"
 path = "src/main.rs"
 
 [dependencies]
-carrier-core = { path = "../carrier-core" }
+carrier-core = { path = "../carrier-core", features = ["network"] }
 anyhow.workspace = true
-clap.workspace   = true
+clap.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
