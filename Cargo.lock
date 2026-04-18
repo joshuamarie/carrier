@@ -209,6 +209,7 @@ dependencies = [
  "flate2",
  "insta",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "tar",

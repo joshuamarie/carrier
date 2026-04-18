@@ -26,3 +26,4 @@ tempfile = "3"
 clap = { version = "4", features = ["derive"] }
 assert_cmd = "2"
 insta = "1"
+semver = "1"
