@@ -1,3 +1,11 @@
+// Remove read_name entirely. Any call site that was:
+//
+//   let name = tar::read_name(tar_path)?;
+//
+// becomes:
+//
+//   let name = tar::read_toml(tar_path)?.module.name;
+
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -7,18 +15,6 @@ use tar::Builder;
 
 use crate::manifest::Manifest;
 
-/// Bundle a module into a `.tar.gz` source distribution.
-///
-/// Archive structure mirrors Python sdist:
-/// ```
-/// stringy_0.1.0/
-///     carrier.toml
-///     stringy/
-///         __init__.R
-///         md/
-///             __init__.R
-///             hello.R
-/// ```
 pub fn bundle(
     src_path: &Path,
     project_root: &Path,
@@ -31,16 +27,13 @@ pub fn bundle(
     let enc = GzEncoder::new(file, Compression::default());
     let mut archive = Builder::new(enc);
 
-    // Top-level directory inside the tarball: <n>_<version>/
     let top = format!("{}_{}", manifest.name, manifest.version);
 
-    // carrier.toml at <n>_<version>/carrier.toml
     let toml_path = project_root.join("carrier.toml");
     archive
         .append_path_with_name(&toml_path, format!("{top}/carrier.toml"))
         .context("Failed to add carrier.toml to archive")?;
 
-    // Source files at <n>_<version>/<n>/...
     for entry in all_files(src_path) {
         let rel = entry
             .strip_prefix(src_path)
@@ -58,17 +51,10 @@ pub fn bundle(
             .with_context(|| format!("Failed to add to archive: {tar_name}"))?;
     }
 
-    archive
-        .finish()
-        .context("Failed to finalize tar.gz archive")?;
-
+    archive.finish().context("Failed to finalize tar.gz archive")?;
     Ok(())
 }
 
-/// Unpack a `.tar.gz` source distribution into the install directory.
-///
-/// Strips the top-level `<n>_<version>/` directory.
-/// Result: `<install_dir>/stringy/carrier.toml`, `<install_dir>/stringy/__init__.R`, etc.
 pub fn unpack(tar_path: &Path, install_dir: &Path) -> Result<()> {
     let file = File::open(tar_path)
         .with_context(|| format!("Failed to open: {}", tar_path.display()))?;
@@ -76,19 +62,14 @@ pub fn unpack(tar_path: &Path, install_dir: &Path) -> Result<()> {
     let gz = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz);
 
-    for entry in archive
-        .entries()
-        .context("Failed to read tar.gz entries")?
-    {
+    for entry in archive.entries().context("Failed to read tar.gz entries")? {
         let mut entry = entry.context("Failed to read tar.gz entry")?;
         let raw_path = entry.path()
             .context("Failed to get entry path")?
             .to_path_buf();
 
-        // Strip the top-level <n>_<version>/ prefix
         let stripped = strip_top_level(&raw_path)?;
 
-        // Skip the top-level directory entry itself
         if stripped == Path::new("") || stripped == Path::new(".") {
             continue;
         }
@@ -108,20 +89,17 @@ pub fn unpack(tar_path: &Path, install_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Read the manifest from a `.tar.gz` by finding and parsing `carrier.toml`.
-/// tar.gz does not embed a manifest.json
-/// We derive it from carrier.toml directly.
-pub fn read_name(tar_path: &Path) -> Result<String> {
+/// Read and parse the `carrier.toml` embedded in a `.tar.gz` without
+/// fully extracting the archive. Use `.module.name` if you only need
+/// the module name — `read_name` has been removed as redundant.
+pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
     let file = File::open(tar_path)
         .with_context(|| format!("Failed to open: {}", tar_path.display()))?;
 
     let gz = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz);
 
-    for entry in archive
-        .entries()
-        .context("Failed to read tar.gz entries")?
-    {
+    for entry in archive.entries().context("Failed to read tar.gz entries")? {
         let mut entry = entry.context("Failed to read entry")?;
         let raw_path = entry.path()?.to_path_buf();
         let stripped = strip_top_level(&raw_path)?;
@@ -130,11 +108,8 @@ pub fn read_name(tar_path: &Path) -> Result<String> {
             let mut s = String::new();
             std::io::Read::read_to_string(&mut entry, &mut s)
                 .context("Failed to read carrier.toml from archive")?;
-
-            let toml: crate::carrier_toml::CarrierToml = toml::from_str(&s)
-                .context("Failed to parse carrier.toml from archive")?;
-
-            return Ok(toml.module.name);
+            return toml::from_str(&s)
+                .context("Failed to parse carrier.toml from archive");
         }
     }
 
@@ -144,11 +119,9 @@ pub fn read_name(tar_path: &Path) -> Result<String> {
     )
 }
 
-/// Strip the top-level directory component from a tar path.
-/// e.g. `stringy_0.1.0/stringy/__init__.R` into `stringy/__init__.R`
 fn strip_top_level(path: &Path) -> Result<PathBuf> {
     let mut components = path.components();
-    components.next(); // skip top-level dir
+    components.next();
     Ok(components.as_path().to_path_buf())
 }
 
