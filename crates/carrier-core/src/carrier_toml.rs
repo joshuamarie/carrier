@@ -1,14 +1,21 @@
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-/// `carrier.toml` file inside a module directory acts
-/// like R's DESCRIPTION or Python's pyproject.toml
+pub const DEFAULT_CRAN_MIRROR: &str = "https://cloud.r-project.org";
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct TomlRepositories {
+    pub cran: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CarrierToml {
     pub module: ModuleMeta,
     pub dependencies: Option<TomlDependencies>,
     pub test: Option<TestConfig>,
+    pub repositories: Option<TomlRepositories>, 
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,8 +30,8 @@ pub struct ModuleMeta {
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct TomlDependencies {
-    pub packages: Option<Vec<String>>,
-    pub modules: Option<Vec<String>>,
+    pub packages: Option<BTreeMap<String, String>>,
+    pub modules: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,7 +41,6 @@ pub struct TestConfig {
 }
 
 impl CarrierToml {
-
     pub fn from_dir(project_root: &Path) -> Result<Self> {
         let toml_path = project_root.join("carrier.toml");
         let contents = std::fs::read_to_string(&toml_path)
@@ -47,14 +53,8 @@ impl CarrierToml {
             .with_context(|| format!("Failed to parse carrier.toml at {}", toml_path.display()))
     }
 
-    /// Resolves and validates the source directory.
-    /// The source folder must be named after `name` in `carrier.toml`
-    /// and must sit directly next to `carrier.toml` at the project root.
-    ///
-    /// e.g. if name = "time_series", expects <project_root>/time_series/
     pub fn resolve_src_dir(&self, project_root: &Path) -> Result<PathBuf> {
         let src_path = project_root.join(&self.module.name);
-
         if !src_path.exists() {
             bail!(
                 "Source directory '{}' not found in {}.\n\
@@ -64,14 +64,9 @@ impl CarrierToml {
                 self.module.name,
             );
         }
-
         if !src_path.is_dir() {
-            bail!(
-                "'{}' exists but is not a directory.",
-                src_path.display()
-            );
+            bail!("'{}' exists but is not a directory.", src_path.display());
         }
-
         Ok(src_path)
     }
 
@@ -85,14 +80,27 @@ authors = []
 license = "Unknown"
 r_version = "4.0.0"
 
-[dependencies]
-packages = []
-modules = []
+[dependencies.packages]
+# dplyr = "*"
+# ggplot2 = ">=3.5.0, <=4.1.0"
+
+[dependencies.modules]
+# utils/core = "*"
+
+[repositories]
+# cran = "https://cloud.r-project.org"
 
 [test]
 framework = "testthat"
 dir = "tests"
 "#
         )
+    }
+    
+    pub fn cran_url(&self) -> &str {
+        self.repositories
+            .as_ref()
+            .and_then(|r| r.cran.as_deref())
+            .unwrap_or(DEFAULT_CRAN_MIRROR)
     }
 }
