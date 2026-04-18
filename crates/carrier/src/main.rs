@@ -12,7 +12,7 @@ use commands::{
 
 #[derive(Parser)]
 #[command(name = "carrier")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "A bundler and package manager for box modules")]
 struct Cli {
     #[command(subcommand)]
@@ -46,6 +46,8 @@ enum Commands {
     Install {
         /// The module source
         source: String,
+        #[arg(long, help = "Automatically install R package dependencies from CRAN")]
+        install_deps: bool,
     },
 
     /// Remove an installed module
@@ -69,8 +71,8 @@ fn main() {
         Commands::Bundle { path, rmbx } => {
             commands::bundle::run(BundleArgs { path, rmbx })
         }
-        Commands::Install { source } => {
-            commands::install::run(InstallArgs { source })
+        Commands::Install { source, install_deps } => {
+            commands::install::run(InstallArgs { source, install_deps })
         }
         Commands::Remove { name, force } => {
             commands::remove::exec(RemoveArgs { name, force })
