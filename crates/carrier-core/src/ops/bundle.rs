@@ -69,8 +69,8 @@ fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
 
     let deps = toml.dependencies.clone().unwrap_or_default();
     let dependencies = Dependencies {
-        packages: deps.packages.unwrap_or_default(),
-        modules: deps.modules.unwrap_or_default(),
+        packages: deps.packages.unwrap_or_default().into_keys().collect(),
+        modules: deps.modules.unwrap_or_default().into_keys().collect(),
     };
 
     Ok(Manifest::new(
