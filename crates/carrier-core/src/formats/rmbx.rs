@@ -3,7 +3,6 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use walkdir::WalkDir;
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 use crate::manifest::Manifest;
@@ -155,20 +154,19 @@ pub fn collect_files(base: &Path) -> Result<Vec<String>> {
 }
 
 fn all_files(base: &Path) -> Vec<PathBuf> {
-    WalkDir::new(base)
+    walkdir::WalkDir::new(base)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
+            // Only check components relative to base, not the full absolute path
             e.path()
+                .strip_prefix(base)
+                .unwrap_or(e.path())
                 .components()
                 .filter_map(|c| {
                     let s = c.as_os_str().to_string_lossy();
-                    if s == "." || s == ".." {
-                        None
-                    } else {
-                        Some(s.starts_with('.'))
-                    }
+                    if s == "." || s == ".." { None } else { Some(s.starts_with('.')) }
                 })
                 .all(|is_hidden| !is_hidden)
         })

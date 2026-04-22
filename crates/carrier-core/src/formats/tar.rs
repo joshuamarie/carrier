@@ -119,6 +119,17 @@ pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
     )
 }
 
+pub fn collect_files(base: &Path) -> Result<Vec<String>> {
+    all_files(base)
+        .iter()
+        .map(|p| {
+            p.strip_prefix(base)
+                .map(|r| r.to_string_lossy().replace('\\', "/"))
+                .with_context(|| format!("Failed to strip prefix from {}", p.display()))
+        })
+        .collect()
+}
+
 fn strip_top_level(path: &Path) -> Result<PathBuf> {
     let mut components = path.components();
     components.next();
@@ -131,7 +142,10 @@ fn all_files(base: &Path) -> Vec<PathBuf> {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
+            // Only check components relative to base, not the full absolute path
             e.path()
+                .strip_prefix(base)
+                .unwrap_or(e.path())
                 .components()
                 .filter_map(|c| {
                     let s = c.as_os_str().to_string_lossy();
