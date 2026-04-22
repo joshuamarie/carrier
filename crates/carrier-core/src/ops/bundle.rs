@@ -48,6 +48,7 @@ pub fn run(path: &str, use_rmbx: bool) -> Result<()> {
 pub fn bundle_to(project_root: &Path, output_path: &Path, use_rmbx: bool) -> Result<()> {
     let toml = CarrierToml::from_dir(project_root)?;
     let src_path = toml.resolve_src_dir(project_root)?;
+
     let manifest = build_manifest(&toml, &src_path)?;
 
     if use_rmbx {
@@ -60,7 +61,10 @@ pub fn bundle_to(project_root: &Path, output_path: &Path, use_rmbx: bool) -> Res
 fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
     let meta = &toml.module;
 
-    let files = crate::formats::rmbx::collect_files(src_path)
+    // let files = crate::formats::rmbx::collect_files(src_path)
+    //     .context("Failed to collect source files")?;
+    
+    let files = tar::collect_files(src_path)  
         .context("Failed to collect source files")?;
 
     if files.is_empty() {
