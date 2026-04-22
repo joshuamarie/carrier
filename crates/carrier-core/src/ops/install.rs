@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use ::tar::Archive as TarArchive;
-use crate::carrier_toml::{CarrierToml, TomlDependencies};
+use crate::carrier_toml::TomlDependencies; 
 use crate::formats::{rmbx, tar};
 use crate::ops::resolve;
 use crate::paths::resolve_install_dir;
@@ -14,7 +14,7 @@ enum InstallSource {
     Rmbx(PathBuf),
     Tar(PathBuf),
     Dir(PathBuf),
-    GitHub { user: String, repo: String },
+    GitHub { user: String, repo: String, subpath: Option<String> },
 }
 
 pub fn run(source: &str, install_deps: bool) -> Result<()> {
@@ -22,7 +22,9 @@ pub fn run(source: &str, install_deps: bool) -> Result<()> {
         InstallSource::Rmbx(path) => install_from_rmbx(&path, install_deps),
         InstallSource::Tar(path) => install_from_tar(&path, install_deps),
         InstallSource::Dir(path) => install_from_dir(&path, install_deps),
-        InstallSource::GitHub { user, repo } => install_from_github(&user, &repo, install_deps),
+        InstallSource::GitHub { user, repo, subpath } => {
+            install_from_github(&user, &repo, subpath.as_deref(), install_deps)
+        }
     }
 }
 
@@ -33,13 +35,11 @@ fn parse_source(s: &str) -> Result<InstallSource> {
     }
 
     if let Some(rest) = s.strip_prefix("gh:") {
-        let parts: Vec<&str> = rest.splitn(2, '/').collect();
-        if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
-            bail!("Invalid GitHub source '{}'. Expected: gh:username/repo", s);
-        }
+        let gh = parse_github_source(rest)?;
         return Ok(InstallSource::GitHub {
-            user: parts[0].to_owned(),
-            repo: parts[1].to_owned(),
+            user: gh.user,
+            repo: gh.repo,
+            subpath: gh.subpath,
         });
     }
 
@@ -197,8 +197,39 @@ fn install_from_dir(project_root: &PathBuf, install_deps: bool) -> Result<()> {
 //     Ok(())
 // }
 
+struct GitHubSource {
+    user: String,
+    repo: String,
+    subpath: Option<String>, 
+}
+
+fn parse_github_source(rest: &str) -> Result<GitHubSource> {
+    let parts: Vec<&str> = rest.splitn(2, '/').collect();
+    if parts.len() != 2 || parts[0].is_empty() || parts[1].is_empty() {
+        bail!("Invalid GitHub source. Expected: gh:username/repo or gh:username/repo/tree/branch/subpath");
+    }
+    let user = parts[0].to_owned();
+    let remainder = parts[1]; 
+    let repo_and_rest: Vec<&str> = remainder.splitn(2, '/').collect();
+    let repo = repo_and_rest[0].to_owned();
+
+    let subpath = if repo_and_rest.len() == 2 {
+        let after_repo = repo_and_rest[1];
+        let subpath = if let Some(s) = after_repo.strip_prefix("tree/") {
+            s.splitn(2, '/').nth(1).unwrap_or("").to_owned()
+        } else {
+            after_repo.to_owned()
+        };
+        if subpath.is_empty() { None } else { Some(subpath) }
+    } else {
+        None
+    };
+
+    Ok(GitHubSource { user, repo, subpath })
+}
+
 #[cfg(feature = "network")]
-fn install_from_github(user: &str, repo: &str, install_deps: bool) -> Result<()> {
+fn install_from_github(user: &str, repo: &str, subpath: Option<&str>, install_deps: bool) -> Result<()> {
     let url = format!("https://api.github.com/repos/{}/{}/tarball", user, repo);
     println!("Fetching {}/{}...", user, repo);
 
@@ -215,8 +246,20 @@ fn install_from_github(user: &str, repo: &str, install_deps: bool) -> Result<()>
     extract_tarball(&tarball_path, &extract_dir)
         .context("Failed to extract tarball")?;
 
-    let project_root = find_single_subdir(&extract_dir)
+    let extracted_root = find_single_subdir(&extract_dir)
         .context("Could not find module directory in downloaded archive")?;
+
+    let project_root = match subpath {
+        Some(sub) => extracted_root.join(sub),
+        None => extracted_root,
+    };
+
+    if !project_root.exists() {
+        match subpath {
+            Some(sub) => bail!("Subpath '{}' not found in the downloaded archive", sub),
+            None => bail!("Extracted archive root does not exist"),
+        }
+    }
 
     if !project_root.join("carrier.toml").exists() {
         bail!(
@@ -226,11 +269,9 @@ fn install_from_github(user: &str, repo: &str, install_deps: bool) -> Result<()>
         );
     }
 
-    // Read deps from the extracted carrier.toml before bundling
-    // let deps = read_deps_from_dir(&project_root)?;
-    let toml = CarrierToml::from_dir(&project_root)?;
-    let deps = toml.dependencies.clone().unwrap_or_default();
-    let plan = resolve::resolve(&deps, toml.cran_url())?;
+    // let toml = CarrierToml::from_dir(&project_root)?;
+    // let deps = toml.dependencies.clone().unwrap_or_default();
+    // let plan = resolve::resolve(&deps, toml.cran_url())?;
 
     let output_path = tmp.path().join(format!("{}.tar.gz", repo));
     crate::ops::bundle::bundle_to(&project_root, &output_path, false)
@@ -238,11 +279,19 @@ fn install_from_github(user: &str, repo: &str, install_deps: bool) -> Result<()>
 
     install_from_tar(&output_path, install_deps)?;
 
-    println!("Dependencies:");
-    resolve::print_plan(&plan);
-    resolve::execute_plan(&plan, !install_deps)?;
+    // println!("Dependencies:");
+    // resolve::print_plan(&plan);
+    // resolve::execute_plan(&plan, !install_deps)?;
 
     Ok(())
+}
+
+#[cfg(not(feature = "network"))]
+fn install_from_github(_user: &str, _repo: &str, _subpath: Option<&str>, _install_deps: bool) -> Result<()> {
+    bail!(
+        "GitHub install requires the 'network' feature.\n\
+         Rebuild with: cargo build --features network"
+    )
 }
 
 /// Stub for when the `network` feature is disabled — gives a clear error
