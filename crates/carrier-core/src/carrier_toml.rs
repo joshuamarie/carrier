@@ -26,6 +26,7 @@ pub struct ModuleMeta {
     pub authors: Vec<String>,
     pub license: String,
     pub r_version: String,
+    pub src: Option<String>
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -52,23 +53,53 @@ impl CarrierToml {
         toml::from_str(&contents)
             .with_context(|| format!("Failed to parse carrier.toml at {}", toml_path.display()))
     }
-
+    
     pub fn resolve_src_dir(&self, project_root: &Path) -> Result<PathBuf> {
-        let src_path = project_root.join(&self.module.name);
-        if !src_path.exists() {
-            bail!(
-                "Source directory '{}' not found in {}.\n\
-                 Expected a folder named '{}' next to carrier.toml.",
-                self.module.name,
-                project_root.display(),
-                self.module.name,
-            );
+        // 1. Explicit `src` key in carrier.toml
+        // 2. Subdirectory named after the module (local project convention)
+        // 3. project_root itself (GitHub tarball — src files at root)
+        let candidates: &[PathBuf] = &[
+            self.module.src.as_deref()
+                .map(|s| project_root.join(s))
+                .unwrap_or_else(|| project_root.join(&self.module.name)),
+            project_root.to_path_buf(),
+        ];
+    
+        for path in candidates {
+            if path.is_dir() {
+                let has_r_files = walkdir::WalkDir::new(path)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .any(|e| e.path().extension().and_then(|x| x.to_str()) == Some("R"));
+                if has_r_files {
+                    return Ok(path.clone());
+                }
+            }
         }
-        if !src_path.is_dir() {
-            bail!("'{}' exists but is not a directory.", src_path.display());
-        }
-        Ok(src_path)
+    
+        bail!(
+            "No R source files found in '{}' or its '{}' subdirectory.",
+            project_root.display(),
+            self.module.name,
+        );
     }
+
+    // pub fn resolve_src_dir(&self, project_root: &Path) -> Result<PathBuf> {
+    //     let src_path = project_root.join(&self.module.name);
+    //     if !src_path.exists() {
+    //         bail!(
+    //             "Source directory '{}' not found in {}.\n\
+    //              Expected a folder named '{}' next to carrier.toml.",
+    //             self.module.name,
+    //             project_root.display(),
+    //             self.module.name,
+    //         );
+    //     }
+    //     if !src_path.is_dir() {
+    //         bail!("'{}' exists but is not a directory.", src_path.display());
+    //     }
+    //     Ok(src_path)
+    // }
 
     pub fn default_template(name: &str) -> String {
         format!(
