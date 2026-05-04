@@ -6,75 +6,90 @@ use flate2::read::GzDecoder;
 use semver::Version;
 
 use crate::cran::packages::{fetch, PackageRecord};
+use crate::ops::resolve::ResolvedPackage;
 use crate::version::VersionSpec;
 
-/// Install a set of R packages (and their transitive deps) from a
-/// CRAN-like repository into `lib_path`.
+/// Install a set of resolved R packages into `lib_path`.
 ///
-/// `requested` maps package name → version spec string from `carrier.toml`
-/// (e.g. `"dplyr" → ">=1.1.0"`).
+/// Packages are grouped by repo so each PACKAGES.gz is fetched only once
+/// per repository.
 pub fn install_packages(
-    requested: &BTreeMap<String, String>,
-    repo_url: &str,
+    packages: &BTreeMap<String, ResolvedPackage>,
     lib_path: &Path,
 ) -> Result<()> {
-    println!("Fetching package index from {}...", repo_url);
-    let index = fetch(repo_url)?;
-
-    // Resolve the full transitive install set
-    let to_install = resolve_install_set(requested, &index, repo_url)?;
+    // Group packages by repo
+    let mut by_repo: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    for (name, pkg) in packages {
+        by_repo
+            .entry(pkg.repo.clone())
+            .or_default()
+            .insert(name.clone(), pkg.version_spec.clone());
+    }
 
     std::fs::create_dir_all(lib_path)
         .with_context(|| format!("Failed to create R lib dir: {}", lib_path.display()))?;
 
-    for (pkg, record) in &to_install {
-        let pkg_dir = lib_path.join(pkg);
+    for (repo, pkgs) in &by_repo {
+        println!("Fetching package index from {}...", repo);
+        let index = fetch(repo)?;
+        let to_install = resolve_install_set(pkgs, &index, repo)?;
 
-        if pkg_dir.is_dir() {
-            let desc_path = pkg_dir.join("DESCRIPTION");
-            match read_installed_version(&desc_path) {
-                Ok(installed_version) => {
-                    // Look up the spec for this package — direct deps have an
-                    // explicit spec; transitive deps default to "*" (any version).
-                    let spec_str = requested
-                        .get(pkg.as_str())
-                        .map(|s| s.as_str())
-                        .unwrap_or("*");
-                    let spec = VersionSpec::parse(spec_str)?;
+        for (pkg, record) in &to_install {
+            let pkg_dir = lib_path.join(pkg);
 
-                    if spec.matches(&installed_version) {
+            if pkg_dir.is_dir() {
+                let desc_path = pkg_dir.join("DESCRIPTION");
+                match read_installed_version(&desc_path) {
+                    Ok(installed_version) => {
+                        let spec_str = pkgs
+                            .get(pkg.as_str())
+                            .map(|s| s.as_str())
+                            .unwrap_or("*");
+                        let spec = VersionSpec::parse(spec_str)?;
+
+                        if spec.matches(&installed_version) {
+                            println!(
+                                "  [ok] {} {} (already satisfied)",
+                                pkg, installed_version
+                            );
+                            continue;
+                        }
+
                         println!(
-                            "  [ok] {} {} (already satisfied)",
-                            pkg, installed_version
+                            "  [upgrading] {} {} → {}...",
+                            pkg, installed_version, record.version
                         );
-                        continue;
                     }
-
-                    println!(
-                        "  [upgrading] {} {} → {}...",
-                        pkg, installed_version, record.version
-                    );
+                    Err(_) => {
+                        println!(
+                            "  [reinstalling] {} (could not read installed version)...",
+                            pkg
+                        );
+                    }
                 }
-                Err(_) => {
-                    // DESCRIPTION missing or unparseable — reinstall to be safe
-                    println!("  [reinstalling] {} (could not read installed version)...", pkg);
+            } else {
+                println!("  [installing] {} {}...", pkg, record.version);
+            }
+
+            match download_and_unpack(pkg, &record.version.to_string(), repo, lib_path) {
+                Ok(()) => println!("  [done] {} {}", pkg, record.version),
+                Err(e) => {
+                    let is_direct = pkgs.contains_key(pkg.as_str());
+                    if is_direct {
+                        return Err(e.context(format!("Failed to install {}", pkg)));
+                    } else {
+                        eprintln!("  [warn] skipping transitive dep {} — {}", pkg, e);
+                    }
                 }
             }
-        } else {
-            println!("  [installing] {} {}...", pkg, record.version);
         }
-
-        download_and_unpack(pkg, &record.version.to_string(), repo_url, lib_path)
-            .with_context(|| format!("Failed to install {}", pkg))?;
-
-        println!("  [done] {} {}", pkg, record.version);
     }
 
     Ok(())
 }
 
 /// Walk the dep graph breadth-first, validating version specs against the
-/// CRAN index and collecting the full set of packages to install.
+/// index and collecting the full set of packages to install.
 fn resolve_install_set<'a>(
     requested: &BTreeMap<String, String>,
     index: &'a HashMap<String, PackageRecord>,
@@ -84,7 +99,6 @@ fn resolve_install_set<'a>(
     let mut visited: HashSet<String> = HashSet::new();
     let mut queue: VecDeque<String> = VecDeque::new();
 
-    // Seed queue with direct deps, validating specs immediately
     for (pkg, spec_str) in requested {
         let spec = VersionSpec::parse(spec_str)?;
         let record = index.get(pkg.as_str()).with_context(|| {
@@ -92,7 +106,7 @@ fn resolve_install_set<'a>(
         })?;
         if !spec.matches(&record.version) {
             anyhow::bail!(
-                "Version conflict: '{}' requires {} but CRAN has {}",
+                "Version conflict: '{}' requires {} but index has {}",
                 pkg, spec_str, record.version
             );
         }
@@ -108,10 +122,10 @@ fn resolve_install_set<'a>(
         let record = match index.get(pkg.as_str()) {
             Some(r) => r,
             None => {
-                // Transitive dep missing from index — warn and skip rather
-                // than hard-fail, since some packages list base deps that
-                // aren't in PACKAGES.gz.
-                eprintln!("  [warn] transitive dep '{}' not found in index, skipping", pkg);
+                eprintln!(
+                    "  [warn] transitive dep '{}' not found in index, skipping",
+                    pkg
+                );
                 continue;
             }
         };
@@ -155,18 +169,50 @@ fn download_and_unpack(
     repo_url: &str,
     lib_path: &Path,
 ) -> Result<()> {
-    let url = format!(
+    let primary_url = format!(
         "{}/src/contrib/{}_{}.tar.gz",
         repo_url.trim_end_matches('/'),
         pkg,
         version
     );
 
-    let response = reqwest::blocking::get(&url)
-        .with_context(|| format!("Failed to download {}", url))?;
+    let response = reqwest::blocking::get(&primary_url)
+        .with_context(|| format!("Failed to download {}", primary_url))?;
+
+    let response = if response.status() == reqwest::StatusCode::NOT_FOUND {
+        // Try CRAN archive path first
+        let archive_url = format!(
+            "{}/src/contrib/Archive/{}/{}_{}.tar.gz",
+            repo_url.trim_end_matches('/'),
+            pkg,
+            pkg,
+            version
+        );
+        eprintln!("  [warn] {} not in src/contrib, trying archive...", pkg);
+        let archive_resp = reqwest::blocking::get(&archive_url)
+            .with_context(|| format!("Failed to download {}", archive_url))?;
+
+        // If archive also 404s and this looks like r-universe, try the .9000
+        // dev version suffix that r-universe uses
+        if archive_resp.status() == reqwest::StatusCode::NOT_FOUND {
+            let dev_url = format!(
+                "{}/src/contrib/{}_{}.9000.tar.gz",
+                repo_url.trim_end_matches('/'),
+                pkg,
+                version
+            );
+            eprintln!("  [warn] {} not in archive, trying dev version...", pkg);
+            reqwest::blocking::get(&dev_url)
+                .with_context(|| format!("Failed to download {}", dev_url))?
+        } else {
+            archive_resp
+        }
+    } else {
+        response
+    };
 
     if !response.status().is_success() {
-        anyhow::bail!("HTTP {} downloading {}", response.status(), url);
+        anyhow::bail!("HTTP {} downloading {} {}", response.status(), pkg, version);
     }
 
     let bytes = response.bytes()

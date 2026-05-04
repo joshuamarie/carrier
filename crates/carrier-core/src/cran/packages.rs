@@ -7,9 +7,14 @@ use semver::Version;
 
 /// Packages that ship with R itself — never installable from CRAN.
 const BASE_PACKAGES: &[&str] = &[
+    // Native packages (base)
     "R", "base", "compiler", "datasets", "graphics", "grDevices",
     "grid", "methods", "parallel", "splines", "stats", "stats4",
     "tcltk", "tools", "utils",
+    // recommended packages: ship with R, not on CRAN src/contrib
+    "boot", "class", "cluster", "codetools", "foreign", "KernSmooth",
+    "lattice", "MASS", "Matrix", "mgcv", "nlme", "nnet", "rpart",
+    "spatial", "survival",
 ];
 
 #[derive(Debug, Clone)]
@@ -19,23 +24,34 @@ pub struct PackageRecord {
 }
 
 /// Fetch and parse `PACKAGES.gz` from a CRAN-like repository URL.
-/// Returns a map of package name → [`PackageRecord`].
 pub fn fetch(repo_url: &str) -> Result<HashMap<String, PackageRecord>> {
     let url = format!(
         "{}/src/contrib/PACKAGES.gz",
         repo_url.trim_end_matches('/')
     );
 
-    let response = reqwest::blocking::get(&url)
-        .with_context(|| format!("Failed to fetch package index: {}", url))?;
-
-    if !response.status().is_success() {
-        anyhow::bail!("HTTP {} fetching package index: {}", response.status(), url);
+    let mut last_err = None;
+    for attempt in 1..=3 {
+        match reqwest::blocking::get(&url) {
+            Ok(response) if response.status().is_success() => {
+                let bytes = response.bytes().context("Failed to read PACKAGES.gz bytes")?;
+                let gz = GzDecoder::new(bytes.as_ref());
+                return parse_dcf(BufReader::new(gz));
+            }
+            Ok(response) => {
+                let status = response.status();
+                eprintln!("  [warn] attempt {}/3: HTTP {} fetching index, retrying...", attempt, status);
+                last_err = Some(anyhow::anyhow!("HTTP {} fetching package index: {}", status, url));
+            }
+            Err(e) => {
+                eprintln!("  [warn] attempt {}/3: request failed, retrying...", attempt);
+                last_err = Some(anyhow::anyhow!("Failed to fetch package index: {}: {}", url, e));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(2u64.pow(attempt)));
     }
 
-    let bytes = response.bytes().context("Failed to read PACKAGES.gz bytes")?;
-    let gz = GzDecoder::new(bytes.as_ref());
-    parse_dcf(BufReader::new(gz))
+    Err(last_err.unwrap())
 }
 
 fn parse_dcf(reader: impl BufRead) -> Result<HashMap<String, PackageRecord>> {
@@ -44,8 +60,6 @@ fn parse_dcf(reader: impl BufRead) -> Result<HashMap<String, PackageRecord>> {
     let mut name: Option<String> = None;
     let mut version: Option<String> = None;
     let mut deps: Vec<String> = Vec::new();
-    // Track whether the previous field was a dep field so continuation
-    // lines are appended correctly.
     let mut in_dep_field = false;
 
     for line in reader.lines() {
@@ -93,9 +107,15 @@ fn flush(
     deps: &mut Vec<String>,
 ) {
     if let (Some(n), Some(v)) = (name.take(), version.take()) {
-        // R version strings can be "4.1-2" — normalise dashes to dots
+        // Normalize dashes and truncate to 3 components for semver
         let v_norm = v.replace('-', ".");
-        match Version::parse(&v_norm) {
+        let v_truncated = v_norm
+            .splitn(4, '.')
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(".");
+
+        match Version::parse(&v_truncated) {
             Ok(parsed) => {
                 map.insert(n, PackageRecord {
                     version: parsed,
@@ -103,8 +123,6 @@ fn flush(
                 });
             }
             Err(_) => {
-                // Unparseable version (shouldn't happen for well-formed CRAN
-                // packages, but skip rather than abort the whole index).
                 deps.clear();
             }
         }
@@ -113,15 +131,18 @@ fn flush(
     }
 }
 
-/// Parse a comma-separated dep field value into bare package names.
-/// Strips version constraints — `"rlang (>= 1.0.0)"` → `"rlang"`.
-/// Filters out base/recommended packages that are never on CRAN.
+/// Parse a comma-separated dep field into bare package names.
+/// Handles both `"rlang (>= 1.0.0)"` and `"rlang(>=1.0.0)"` (no space).
+/// Filters out base and recommended packages.
 fn parse_dep_field(s: &str) -> Vec<String> {
     s.split(',')
         .filter_map(|entry| {
-            let bare = entry.trim().split_once(' ')
-                .map(|(name, _)| name)
-                .unwrap_or(entry.trim());
+            let trimmed = entry.trim();
+            // Strip everything from the first '(' or ' ' onwards
+            let bare = trimmed
+                .split_once(|c: char| c == '(' || c == ' ')
+                .map(|(name, _)| name.trim())
+                .unwrap_or(trimmed);
             if bare.is_empty() || BASE_PACKAGES.contains(&bare) {
                 None
             } else {
