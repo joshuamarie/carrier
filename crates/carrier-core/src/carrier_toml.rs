@@ -5,17 +5,37 @@ use std::path::{Path, PathBuf};
 
 pub const DEFAULT_CRAN_MIRROR: &str = "https://cloud.r-project.org";
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
-pub struct TomlRepositories {
-    pub cran: Option<String>,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum PackageDep {
+    Simple(String),
+    Extended { version: String, repo: Option<String> },
+}
+
+impl PackageDep {
+    pub fn version(&self) -> &str {
+        match self {
+            PackageDep::Simple(v) => v,
+            PackageDep::Extended { version, .. } => version,
+        }
+    }
+
+    pub fn repo(&self) -> &str {
+        match self {
+            PackageDep::Simple(_) => DEFAULT_CRAN_MIRROR,
+            PackageDep::Extended { repo, .. } => {
+                repo.as_deref().unwrap_or(DEFAULT_CRAN_MIRROR)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CarrierToml {
     pub module: ModuleMeta,
-    pub dependencies: Option<TomlDependencies>,
+    pub package_deps: Option<BTreeMap<String, PackageDep>>,
+    pub module_deps: Option<BTreeMap<String, String>>,
     pub test: Option<TestConfig>,
-    pub repositories: Option<TomlRepositories>, 
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,13 +46,7 @@ pub struct ModuleMeta {
     pub authors: Vec<String>,
     pub license: String,
     pub r_version: String,
-    pub src: Option<String>
-}
-
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
-pub struct TomlDependencies {
-    pub packages: Option<BTreeMap<String, String>>,
-    pub modules: Option<BTreeMap<String, String>>,
+    pub src: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -53,18 +67,15 @@ impl CarrierToml {
         toml::from_str(&contents)
             .with_context(|| format!("Failed to parse carrier.toml at {}", toml_path.display()))
     }
-    
+
     pub fn resolve_src_dir(&self, project_root: &Path) -> Result<PathBuf> {
-        // 1. Explicit `src` key in carrier.toml
-        // 2. Subdirectory named after the module (local project convention)
-        // 3. project_root itself (GitHub tarball — src files at root)
         let candidates: &[PathBuf] = &[
             self.module.src.as_deref()
                 .map(|s| project_root.join(s))
                 .unwrap_or_else(|| project_root.join(&self.module.name)),
             project_root.to_path_buf(),
         ];
-    
+
         for path in candidates {
             if path.is_dir() {
                 let has_r_files = walkdir::WalkDir::new(path)
@@ -76,30 +87,13 @@ impl CarrierToml {
                 }
             }
         }
-    
+
         bail!(
             "No R source files found in '{}' or its '{}' subdirectory.",
             project_root.display(),
             self.module.name,
         );
     }
-
-    // pub fn resolve_src_dir(&self, project_root: &Path) -> Result<PathBuf> {
-    //     let src_path = project_root.join(&self.module.name);
-    //     if !src_path.exists() {
-    //         bail!(
-    //             "Source directory '{}' not found in {}.\n\
-    //              Expected a folder named '{}' next to carrier.toml.",
-    //             self.module.name,
-    //             project_root.display(),
-    //             self.module.name,
-    //         );
-    //     }
-    //     if !src_path.is_dir() {
-    //         bail!("'{}' exists but is not a directory.", src_path.display());
-    //     }
-    //     Ok(src_path)
-    // }
 
     pub fn default_template(name: &str) -> String {
         format!(
@@ -111,27 +105,18 @@ authors = []
 license = "Unknown"
 r_version = "4.0.0"
 
-[dependencies.packages]
+[package_deps]
 # dplyr = "*"
-# ggplot2 = ">=3.5.0, <=4.1.0"
+# ggplot2 = ">=3.4.0"
+# fable = {{ version = "*", repo = "https://tidyverts.r-universe.dev/" }}
 
-[dependencies.modules]
-# utils/core = "*"
-
-[repositories]
-# cran = "https://cloud.r-project.org"
+[module_deps]
+# other_module = "*"
 
 [test]
 framework = "testthat"
 dir = "tests"
 "#
         )
-    }
-    
-    pub fn cran_url(&self) -> &str {
-        self.repositories
-            .as_ref()
-            .and_then(|r| r.cran.as_deref())
-            .unwrap_or(DEFAULT_CRAN_MIRROR)
     }
 }

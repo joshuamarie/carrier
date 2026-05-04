@@ -5,18 +5,11 @@ description = "Unit conversion utilities for mass and temperature"
 authors = []
 license = "Unknown"
 r_version = "4.0.0"
-
-[dependencies.packages]
-# Add any CRAN packages here, e.g.:
-# dplyr = "*"
-
-[dependencies.modules]
-# Add any carrier modules here, e.g.:
-# utils/core = "*"
-
-[repositories]
-# cran = "https://cloud.r-project.org"
-
+ 
+[package_deps]
+ 
+[module_deps]
+ 
 [test]
 framework = "testthat"
 dir = "tests"
