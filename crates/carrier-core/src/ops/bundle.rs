@@ -71,10 +71,17 @@ fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
         bail!("No files found in: {}", src_path.display());
     }
 
-    let deps = toml.dependencies.clone().unwrap_or_default();
     let dependencies = Dependencies {
-        packages: deps.packages.unwrap_or_default().into_keys().collect(),
-        modules: deps.modules.unwrap_or_default().into_keys().collect(),
+        packages: toml.package_deps
+            .clone()
+            .unwrap_or_default()
+            .into_keys()
+            .collect(),
+        modules: toml.module_deps
+            .clone()
+            .unwrap_or_default()
+            .into_keys()
+            .collect(),
     };
 
     Ok(Manifest::new(
