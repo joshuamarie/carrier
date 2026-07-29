@@ -1,6 +1,8 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+use crate::carrier_toml::Author;
+
 /// Embedded inside every .rmbx archive as `manifest.json`.
 /// Mirrors the fields from the module's `carrier.toml`.
 #[derive(Debug, Serialize, Deserialize)]
@@ -8,7 +10,7 @@ pub struct Manifest {
     pub name: String,
     pub version: String,
     pub description: String,
-    pub authors: Vec<String>,
+    pub authors: Vec<Author>,
     pub license: String,
     pub r_version: String,
     pub dependencies: Dependencies,
@@ -30,7 +32,7 @@ impl Manifest {
         name: impl Into<String>,
         version: impl Into<String>,
         description: impl Into<String>,
-        authors: Vec<String>,
+        authors: Vec<Author>,
         license: impl Into<String>,
         r_version: impl Into<String>,
         dependencies: Dependencies,
