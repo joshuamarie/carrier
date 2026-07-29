@@ -60,15 +60,23 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
     let manifest = rmbx::read_manifest(rmbx_path)
         .with_context(|| format!("Failed to read manifest from {}", rmbx_path.display()))?;
 
+    let name = manifest.name.clone();
+    let version = manifest.version.clone();
     let install_dir = resolve_install_dir()?;
-    let output_path = install_dir.join(&manifest.name);
+    let module_path = install_dir.join(&name);
 
     std::fs::create_dir_all(&install_dir)
         .context("Failed to create install directory")?;
 
-    if output_path.exists() {
-        std::fs::remove_dir_all(&output_path)
-            .with_context(|| format!("Failed to remove existing: {}", output_path.display()))?;
+    if module_path.exists() {
+        std::fs::remove_dir_all(&module_path)
+            .with_context(|| format!("Failed to remove existing: {}", module_path.display()))?;
+    }
+
+    // Also clean up old dist-info if present
+    let dist_info = install_dir.join(format!("{}-{}.dist-info", name, version));
+    if dist_info.exists() {
+        std::fs::remove_dir_all(&dist_info)?;
     }
 
     rmbx::unpack(rmbx_path, &install_dir)
@@ -76,15 +84,13 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
 
     println!(
         "Installed '{}' ({}) -> {}",
-        manifest.name, manifest.version, output_path.display()
+        name, version, module_path.display()
     );
 
-    // Reconstruct package_deps from manifest — all default to CRAN since
-    // .rmbx manifests don't currently store per-package repo info.
     let package_deps = Some(
         manifest.dependencies.packages
             .into_iter()
-            .map(|name| (name, PackageDep::Simple("*".to_owned())))
+            .map(|n| (n, PackageDep::Simple("*".to_owned())))
             .collect()
     );
 
@@ -102,24 +108,31 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<()> {
     }
 
     let toml = tar::read_toml(tar_path)
-        .with_context(|| format!("Failed to read carrier.toml from {}", tar_path.display()))?;
+        .with_context(|| format!("Failed to read manifest from {}", tar_path.display()))?;
     let name = toml.module.name.clone();
+    let version = toml.module.version.clone();
 
     let install_dir = resolve_install_dir()?;
-    let output_path = install_dir.join(&name);
+    let module_path = install_dir.join(&name);
 
     std::fs::create_dir_all(&install_dir)
         .context("Failed to create install directory")?;
 
-    if output_path.exists() {
-        std::fs::remove_dir_all(&output_path)
-            .with_context(|| format!("Failed to remove existing: {}", output_path.display()))?;
+    if module_path.exists() {
+        std::fs::remove_dir_all(&module_path)
+            .with_context(|| format!("Failed to remove existing: {}", module_path.display()))?;
     }
 
-    tar::unpack(tar_path, &install_dir)
+    // Also clean up old dist-info if present
+    let dist_info = install_dir.join(format!("{}-{}.dist-info", name, version));
+    if dist_info.exists() {
+        std::fs::remove_dir_all(&dist_info)?;
+    }
+
+    tar::unpack(tar_path, &install_dir, &name, &version)
         .with_context(|| format!("Failed to unpack {}", tar_path.display()))?;
 
-    println!("Installed '{}' -> {}", name, output_path.display());
+    println!("Installed '{}' ({}) -> {}", name, version, module_path.display());
 
     let plan = resolve::resolve(&toml.package_deps, &toml.module_deps)?;
     println!("Dependencies:");
