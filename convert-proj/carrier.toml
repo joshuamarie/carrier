@@ -2,7 +2,9 @@
 name = "convert"
 version = "0.1.0"
 description = "Unit conversion utilities for mass and temperature"
-authors = []
+authors = [
+    { name = "Joshua Marie", email = "joshua.marie.k@gmail.com" }
+]
 license = "Unknown"
 r_version = "4.0.0"
  
