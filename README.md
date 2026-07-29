@@ -86,7 +86,7 @@ If you know the structure of Python packages, this feels familiar to you.
 Here's an example: 
 
 ```r
-# carrier install gh:joshuamarie/convert-proj/convert
+# carrier install gh:joshuamarie/carrier/tree/main/convert-proj
 box::use(cv = convert)
 cv$mass$mass_conversion_table(1000)
 ```
