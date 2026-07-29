@@ -2,12 +2,40 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use flate2::read::GzDecoder;
+// use flate2::read::GzDecoder;
 use semver::Version;
 
 use crate::cran::packages::{fetch, PackageRecord};
 use crate::ops::resolve::ResolvedPackage;
 use crate::version::{check_conflicts, VersionSpec};
+use std::io::Write as _;
+
+fn topo_order(to_install: &HashMap<String, &PackageRecord>) -> Vec<String> {
+    fn visit(
+        pkg: &str,
+        to_install: &HashMap<String, &PackageRecord>,
+        visited: &mut HashSet<String>,
+        order: &mut Vec<String>,
+    ) {
+        if visited.contains(pkg) {
+            return;
+        }
+        visited.insert(pkg.to_owned());
+        if let Some(record) = to_install.get(pkg) {
+            for (dep, _) in &record.deps {
+                visit(dep, to_install, visited, order);
+            }
+            order.push(pkg.to_owned());   // moved inside the `if let Some` — only push resolved packages
+        }
+    }
+
+    let mut visited = HashSet::new();
+    let mut order = Vec::new();
+    for pkg in to_install.keys() {
+        visit(pkg, to_install, &mut visited, &mut order);
+    }
+    order
+}
 
 /// Install a set of resolved R packages into `lib_path`.
 ///
@@ -34,7 +62,9 @@ pub fn install_packages(
         let index = fetch(repo)?;
         let to_install = resolve_install_set(pkgs, &index, repo)?;
 
-        for (pkg, record) in &to_install {
+        let order = topo_order(&to_install);
+        for pkg in &order {
+            let record = to_install[pkg];
             let pkg_dir = lib_path.join(pkg);
 
             if pkg_dir.is_dir() {
@@ -183,7 +213,6 @@ fn download_and_unpack(
         .with_context(|| format!("Failed to download {}", primary_url))?;
 
     let response = if response.status() == reqwest::StatusCode::NOT_FOUND {
-        // Try CRAN archive path first
         let archive_url = format!(
             "{}/src/contrib/Archive/{}/{}_{}.tar.gz",
             repo_url.trim_end_matches('/'),
@@ -195,8 +224,6 @@ fn download_and_unpack(
         let archive_resp = reqwest::blocking::get(&archive_url)
             .with_context(|| format!("Failed to download {}", archive_url))?;
 
-        // If archive also 404s and this looks like r-universe, try the .9000
-        // dev version suffix that r-universe uses
         if archive_resp.status() == reqwest::StatusCode::NOT_FOUND {
             let dev_url = format!(
                 "{}/src/contrib/{}_{}.9000.tar.gz",
@@ -221,11 +248,39 @@ fn download_and_unpack(
     let bytes = response.bytes()
         .with_context(|| format!("Failed to read bytes for {}", pkg))?;
 
-    let gz = GzDecoder::new(bytes.as_ref());
-    let mut archive = tar::Archive::new(gz);
+    // Write to a temp .tar.gz file — R CMD INSTALL needs a real file path,
+    // not a stream, and needs the .tar.gz extension to recognize the format.
+    let mut tmp = tempfile::Builder::new()
+        .suffix(".tar.gz")
+        .tempfile()
+        .with_context(|| format!("Failed to create temp file for {}", pkg))?;
+    tmp.write_all(&bytes)
+        .with_context(|| format!("Failed to write temp tarball for {}", pkg))?;
+    let tmp_path = tmp.path();
 
-    archive.unpack(lib_path)
-        .with_context(|| format!("Failed to unpack {} into {}", pkg, lib_path.display()))?;
+    std::fs::create_dir_all(lib_path)
+        .with_context(|| format!("Failed to create lib dir: {}", lib_path.display()))?;
+
+    let lib_arg = format!(
+        "--library={}",
+        lib_path.to_str().context("lib_path contains invalid UTF-8")?
+    );
+    
+    let status = std::process::Command::new("R")
+        .args([
+            "CMD", "INSTALL",
+            "--no-multiarch",
+            "--no-docs",
+            "--no-help",
+            &lib_arg,
+        ])
+        .arg(tmp_path)
+        .status()
+        .with_context(|| format!("Failed to run R CMD INSTALL for {} — is R on PATH?", pkg))?;
+
+    if !status.success() {
+        anyhow::bail!("R CMD INSTALL failed for {} {} (exit: {})", pkg, version, status);
+    }
 
     Ok(())
 }
