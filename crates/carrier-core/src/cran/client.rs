@@ -7,7 +7,7 @@ use semver::Version;
 
 use crate::cran::packages::{fetch, PackageRecord};
 use crate::ops::resolve::ResolvedPackage;
-use crate::version::VersionSpec;
+use crate::version::{check_conflicts, VersionSpec};
 
 /// Install a set of resolved R packages into `lib_path`.
 ///
@@ -98,21 +98,15 @@ fn resolve_install_set<'a>(
     let mut result: HashMap<String, &PackageRecord> = HashMap::new();
     let mut visited: HashSet<String> = HashSet::new();
     let mut queue: VecDeque<String> = VecDeque::new();
+    let mut specs: HashMap<String, Vec<VersionSpec>> = HashMap::new();
 
     for (pkg, spec_str) in requested {
-        let spec = VersionSpec::parse(spec_str)?;
-        let record = index.get(pkg.as_str()).with_context(|| {
-            format!("Package '{}' not found in index at {}", pkg, repo_url)
-        })?;
-        if !spec.matches(&record.version) {
-            anyhow::bail!(
-                "Version conflict: '{}' requires {} but index has {}",
-                pkg, spec_str, record.version
-            );
-        }
+        specs.entry(pkg.clone()).or_default().push(VersionSpec::parse(spec_str)?);
         queue.push_back(pkg.clone());
     }
 
+    // First pass: walk the full graph, collecting every spec placed
+    // on each package before checking any of them.
     while let Some(pkg) = queue.pop_front() {
         if visited.contains(&pkg) {
             continue;
@@ -122,20 +116,29 @@ fn resolve_install_set<'a>(
         let record = match index.get(pkg.as_str()) {
             Some(r) => r,
             None => {
-                eprintln!(
-                    "  [warn] transitive dep '{}' not found in index, skipping",
-                    pkg
-                );
+                eprintln!("  [warn] transitive dep '{}' not found in index, skipping", pkg);
                 continue;
             }
         };
 
         result.insert(pkg.clone(), record);
 
-        for dep in &record.deps {
+        for (dep, dep_spec_str) in &record.deps {
+            if let Ok(dep_spec) = VersionSpec::parse(dep_spec_str) {
+                specs.entry(dep.clone()).or_default().push(dep_spec);
+            }
             if !visited.contains(dep) {
                 queue.push_back(dep.clone());
             }
+        }
+    }
+
+    // Second pass: every package now has its complete spec list, so
+    // conflicts between direct and transitive requirers are caught here.
+    for (pkg, record) in &result {
+        if let Some(pkg_specs) = specs.get(pkg) {
+            check_conflicts(pkg, pkg_specs, std::slice::from_ref(&record.version))
+                .with_context(|| format!("resolving '{}' from {}", pkg, repo_url))?;
         }
     }
 

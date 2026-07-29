@@ -20,7 +20,7 @@ const BASE_PACKAGES: &[&str] = &[
 #[derive(Debug, Clone)]
 pub struct PackageRecord {
     pub version: Version,
-    pub deps: Vec<String>,
+    pub deps: Vec<(String, String)>,
 }
 
 /// Fetch and parse `PACKAGES.gz` from a CRAN-like repository URL.
@@ -134,19 +134,21 @@ fn flush(
 /// Parse a comma-separated dep field into bare package names.
 /// Handles both `"rlang (>= 1.0.0)"` and `"rlang(>=1.0.0)"` (no space).
 /// Filters out base and recommended packages.
-fn parse_dep_field(s: &str) -> Vec<String> {
+fn parse_dep_field(s: &str) -> Vec<(String, String)> {
     s.split(',')
         .filter_map(|entry| {
             let trimmed = entry.trim();
-            // Strip everything from the first '(' or ' ' onwards
-            let bare = trimmed
-                .split_once(|c: char| c == '(' || c == ' ')
-                .map(|(name, _)| name.trim())
-                .unwrap_or(trimmed);
+            let (bare, constraint) = match trimmed.split_once('(') {
+                Some((name, rest)) => (name.trim(), rest.trim_end_matches(')').trim().to_owned()),
+                None => {
+                    let bare = trimmed.split_once(' ').map(|(n, _)| n).unwrap_or(trimmed);
+                    (bare.trim(), "*".to_owned())
+                }
+            };
             if bare.is_empty() || BASE_PACKAGES.contains(&bare) {
                 None
             } else {
-                Some(bare.to_owned())
+                Some((bare.to_owned(), constraint))
             }
         })
         .collect()
