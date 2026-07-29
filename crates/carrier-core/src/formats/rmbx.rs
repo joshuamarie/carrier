@@ -14,16 +14,17 @@ const MANIFEST_FILENAME: &str = "manifest.json";
 /// Archive structure:
 /// ```
 /// manifest.json
-/// stringy/
-///     carrier.toml
+/// tstk/
 ///     __init__.R
-///     md/
-///         __init__.R
-///         hello.R
+///     decomp/
+///     ...
 /// ```
+///
+/// `carrier.toml` is intentionally excluded — it is a project manifest,
+/// not part of the installable module.
 pub fn bundle(
     src_path: &Path,
-    project_root: &Path,
+    _project_root: &Path,
     output_path: &Path,
     manifest: &Manifest,
 ) -> Result<()> {
@@ -38,15 +39,6 @@ pub fn bundle(
         .context("Failed to write manifest entry")?;
     zip.write_all(manifest.to_json()?.as_bytes())
         .context("Failed to write manifest content")?;
-
-    // Write carrier.toml inside <name>/
-    let toml_zip_path = format!("{}/carrier.toml", manifest.name);
-    zip.start_file(&toml_zip_path, options)
-        .context("Failed to write carrier.toml entry")?;
-    let toml_bytes = std::fs::read(project_root.join("carrier.toml"))
-        .context("Failed to read carrier.toml")?;
-    zip.write_all(&toml_bytes)
-        .context("Failed to write carrier.toml content")?;
 
     // Write source files inside <name>/
     for entry in all_files(src_path) {
@@ -78,9 +70,28 @@ pub fn bundle(
 }
 
 /// Unpack a `.rmbx` archive into the install directory.
-/// Extracts everything except `manifest.json`.
-/// Result: `<install_dir>/stringy/carrier.toml`, `<install_dir>/stringy/__init__.R`, etc.
+///
+/// Result:
+/// ```
+/// <install_dir>/tstk/
+///     __init__.R
+///     ...
+/// <install_dir>/tstk-0.1.0.dist-info/
+///     manifest.json
+/// ```
 pub fn unpack(rmbx_path: &Path, install_dir: &Path) -> Result<()> {
+    let manifest = read_manifest(rmbx_path)?;
+    let dist_info_dir = install_dir.join(
+        format!("{}-{}.dist-info", manifest.name, manifest.version)
+    );
+    std::fs::create_dir_all(&dist_info_dir)
+        .with_context(|| format!("Failed to create dist-info dir: {}", dist_info_dir.display()))?;
+
+    // Write manifest.json into dist-info
+    let manifest_path = dist_info_dir.join(MANIFEST_FILENAME);
+    std::fs::write(&manifest_path, manifest.to_json()?)
+        .with_context(|| format!("Failed to write manifest to {}", manifest_path.display()))?;
+
     let file = File::open(rmbx_path)
         .with_context(|| format!("Failed to open: {}", rmbx_path.display()))?;
 
@@ -94,7 +105,7 @@ pub fn unpack(rmbx_path: &Path, install_dir: &Path) -> Result<()> {
 
         let name = entry.name().to_owned();
 
-        // Skip manifest — internal to the bundle format
+        // Skip manifest — already written to dist-info above
         if name == MANIFEST_FILENAME {
             continue;
         }
@@ -139,9 +150,6 @@ pub fn read_manifest(rmbx_path: &Path) -> Result<Manifest> {
     Manifest::from_json(&s)
 }
 
-/// Collect all files recursively from a directory.
-/// Shared between rmbx and tar format modules.
-/// Skips hidden files and directories (e.g. .git).
 pub fn collect_files(base: &Path) -> Result<Vec<String>> {
     all_files(base)
         .iter()
@@ -159,7 +167,6 @@ fn all_files(base: &Path) -> Vec<PathBuf> {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
-            // Only check components relative to base, not the full absolute path
             e.path()
                 .strip_prefix(base)
                 .unwrap_or(e.path())

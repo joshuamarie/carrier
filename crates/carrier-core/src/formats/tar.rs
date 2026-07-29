@@ -1,11 +1,3 @@
-// Remove read_name entirely. Any call site that was:
-//
-//   let name = tar::read_name(tar_path)?;
-//
-// becomes:
-//
-//   let name = tar::read_toml(tar_path)?.module.name;
-
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -15,9 +7,23 @@ use tar::Builder;
 
 use crate::manifest::Manifest;
 
+/// Bundle a module into a `.tar.gz` archive.
+///
+/// Archive structure:
+/// ```
+/// tstk_0.1.0/
+/// └── tstk/
+///     ├── __init__.R
+///     ├── decomp/
+///     └── ...
+/// ```
+///
+/// `carrier.toml` is intentionally excluded — it is a project manifest,
+/// not part of the installable module, just as `pyproject.toml` is not
+/// included inside `site-packages/pandas/`.
 pub fn bundle(
     src_path: &Path,
-    project_root: &Path,
+    _project_root: &Path,
     output_path: &Path,
     manifest: &Manifest,
 ) -> Result<()> {
@@ -28,11 +34,6 @@ pub fn bundle(
     let mut archive = Builder::new(enc);
 
     let top = format!("{}_{}", manifest.name, manifest.version);
-
-    let toml_path = project_root.join("carrier.toml");
-    archive
-        .append_path_with_name(&toml_path, format!("{top}/carrier.toml"))
-        .context("Failed to add carrier.toml to archive")?;
 
     for entry in all_files(src_path) {
         let rel = entry
@@ -51,16 +52,44 @@ pub fn bundle(
             .with_context(|| format!("Failed to add to archive: {tar_name}"))?;
     }
 
+    // Write manifest.json inside the module directory so it travels
+    // with the bundle and can be extracted into .dist-info on install.
+    let manifest_json = manifest.to_json()?;
+    let manifest_bytes = manifest_json.as_bytes();
+    let manifest_tar_name = format!("{}/{}/manifest.json", top, manifest.name);
+    let mut header = tar::Header::new_gnu();
+    header.set_size(manifest_bytes.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    archive
+        .append_data(&mut header, &manifest_tar_name, manifest_bytes)
+        .context("Failed to add manifest.json to archive")?;
+
     archive.finish().context("Failed to finalize tar.gz archive")?;
     Ok(())
 }
 
-pub fn unpack(tar_path: &Path, install_dir: &Path) -> Result<()> {
+/// Unpack a `.tar.gz` carrier archive into the install directory.
+///
+/// Strips the top-level `{name}_{version}/` prefix so the result is:
+/// ```
+/// <install_dir>/tstk/
+///     __init__.R
+///     decomp/
+///     ...
+/// <install_dir>/tstk-0.1.0.dist-info/
+///     manifest.json
+/// ```
+pub fn unpack(tar_path: &Path, install_dir: &Path, name: &str, version: &str) -> Result<()> {
     let file = File::open(tar_path)
         .with_context(|| format!("Failed to open: {}", tar_path.display()))?;
 
     let gz = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz);
+
+    let dist_info_dir = install_dir.join(format!("{}-{}.dist-info", name, version));
+    std::fs::create_dir_all(&dist_info_dir)
+        .with_context(|| format!("Failed to create dist-info dir: {}", dist_info_dir.display()))?;
 
     for entry in archive.entries().context("Failed to read tar.gz entries")? {
         let mut entry = entry.context("Failed to read tar.gz entry")?;
@@ -68,13 +97,23 @@ pub fn unpack(tar_path: &Path, install_dir: &Path) -> Result<()> {
             .context("Failed to get entry path")?
             .to_path_buf();
 
+        // Strip top-level {name}_{version}/ prefix
         let stripped = strip_top_level(&raw_path)?;
 
         if stripped == Path::new("") || stripped == Path::new(".") {
             continue;
         }
 
-        let dest = install_dir.join(&stripped);
+        // manifest.json goes into .dist-info, everything else into place
+        let file_name = stripped.file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
+
+        let dest = if file_name == "manifest.json" {
+            dist_info_dir.join("manifest.json")
+        } else {
+            install_dir.join(&stripped)
+        };
 
         if let Some(parent) = dest.parent() {
             std::fs::create_dir_all(parent)
@@ -90,8 +129,7 @@ pub fn unpack(tar_path: &Path, install_dir: &Path) -> Result<()> {
 }
 
 /// Read and parse the `carrier.toml` embedded in a `.tar.gz` without
-/// fully extracting the archive. Use `.module.name` if you only need
-/// the module name — `read_name` has been removed as redundant.
+/// fully extracting the archive.
 pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
     let file = File::open(tar_path)
         .with_context(|| format!("Failed to open: {}", tar_path.display()))?;
@@ -99,22 +137,52 @@ pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
     let gz = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz);
 
+    // carrier.toml is no longer bundled — read manifest.json instead
+    // and reconstruct what we need, or bail with a clear message.
     for entry in archive.entries().context("Failed to read tar.gz entries")? {
         let mut entry = entry.context("Failed to read entry")?;
         let raw_path = entry.path()?.to_path_buf();
         let stripped = strip_top_level(&raw_path)?;
 
-        if stripped == Path::new("carrier.toml") {
+        if stripped.file_name().and_then(|f| f.to_str()) == Some("manifest.json") {
             let mut s = String::new();
             std::io::Read::read_to_string(&mut entry, &mut s)
-                .context("Failed to read carrier.toml from archive")?;
-            return toml::from_str(&s)
-                .context("Failed to parse carrier.toml from archive");
+                .context("Failed to read manifest.json from archive")?;
+            let manifest = crate::manifest::Manifest::from_json(&s)
+                .context("Failed to parse manifest.json from archive")?;
+            // Reconstruct a minimal CarrierToml from the manifest
+            return Ok(crate::carrier_toml::CarrierToml {
+                module: crate::carrier_toml::ModuleMeta {
+                    name: manifest.name,
+                    version: manifest.version,
+                    description: manifest.description,
+                    authors: manifest.authors
+                        .into_iter()
+                        .map(|n| crate::carrier_toml::Author::Simple(n.to_string()))
+                        .collect(),
+                    license: manifest.license,
+                    r_version: manifest.r_version,
+                    src: None,
+                },
+                package_deps: Some(
+                    manifest.dependencies.packages
+                        .into_iter()
+                        .map(|n| (n, crate::carrier_toml::PackageDep::Simple("*".to_owned())))
+                        .collect()
+                ),
+                module_deps: Some(
+                    manifest.dependencies.modules
+                        .into_iter()
+                        .map(|n| (n, "*".to_owned()))
+                        .collect()
+                ),
+                test: None,
+            });
         }
     }
 
     anyhow::bail!(
-        "No carrier.toml found in {}. Is this a valid carrier package?",
+        "No manifest.json found in {}. Is this a valid carrier package?",
         tar_path.display()
     )
 }
@@ -142,7 +210,6 @@ fn all_files(base: &Path) -> Vec<PathBuf> {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| {
-            // Only check components relative to base, not the full absolute path
             e.path()
                 .strip_prefix(base)
                 .unwrap_or(e.path())
