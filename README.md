@@ -77,9 +77,12 @@ Here's the usual structure of the module:
 
 ## Using installed modules
 
-`carrier` syncs with `{box}` R package. The `box::use()` automatically resolves the path where the installed modules belong, so no `options(box.path = ...)` needed.
+`carrier` syncs with `{box}` R package (this includes the syntax). The `box::use()` automatically resolves the path where the installed modules belong.
+
+Here's an example: 
 
 ```r
-box::use(mod = <name-of-the-module>)
-mod$hello()
+# carrier install gh:joshuamarie/convert-proj/convert
+box::use(cv = convert)
+cv$mass$mass_conversion_table(1000)
 ```
