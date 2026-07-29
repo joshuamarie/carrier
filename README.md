@@ -20,18 +20,22 @@ cargo install --git https://github.com/joshuamarie/carrier
 
 The idea for a distributable module is simple. Similar to Python, the usual structure of `box` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.R` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from R works.  
 
-Here's the usual structure of the module: 
+Here's an example structure of the module: 
 
 ```
 <some-dir-name>/
 ├── carrier.toml   
 ├── README.md
 └── <module-name>/
-    ├── __init__.R
+    ├── __init__.r
+    ├── mod.r
+    ├── mod2.r
     └── <submod>/
-        ├── __init__.R
-        └── example.R
+        ├── __init__.r
+        └── example.r
 ```
+
+If you know the structure of Python packages, this feels familiar to you. 
 
 ## How it works
 
