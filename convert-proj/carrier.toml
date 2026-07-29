@@ -1,7 +1,7 @@
 [module]
 name = "convert"
 version = "0.1.0"
-description = "Unit conversion utilities for mass and temperature"
+description = "Unit conversion utilities for mass and temperature. This is just a demo"
 authors = [
     { name = "Joshua Marie", email = "joshua.marie.k@gmail.com" }
 ]
