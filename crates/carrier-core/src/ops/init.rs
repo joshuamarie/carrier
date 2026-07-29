@@ -28,47 +28,33 @@ pub fn run(name: &str, dir_name: Option<&str>) -> Result<()> {
     )
     .context("Failed to write README.md")?;
 
+    // Source directory named after the module — the default convention
     let src_dir = project_root.join(name);
     fs::create_dir_all(&src_dir)
         .with_context(|| format!("Failed to create source directory: {}", src_dir.display()))?;
 
     fs::write(
         src_dir.join("__init__.R"),
-        "#' @export\nbox::use(./md)\n",
+        "#' @export\nbox::use()\n",
     )
     .context("Failed to write __init__.R")?;
-
-    let md_dir = src_dir.join("md");
-    fs::create_dir_all(&md_dir)
-        .context("Failed to create md/ directory")?;
-
-    fs::write(
-        md_dir.join("__init__.R"),
-        "#' @export\nbox::use(./hello)\n",
-    )
-    .context("Failed to write md/__init__.R")?;
-
-    fs::write(
-        md_dir.join("hello.R"),
-        format!(
-            "#' Say hello\n#'\n#' @export\nhello = function() {{\n  \"Hello from {}!\"\n}}\n",
-            name
-        ),
-    )
-    .context("Failed to write hello.R")?;
 
     let files = [
         "carrier.toml",
         "README.md",
-        &format!("{name}/__init__.R"),
-        &format!("{name}/md/__init__.R"),
-        &format!("{name}/md/hello.R"),
+        &format!("{}/__init__.R", name),
     ];
 
     println!("Initialized module '{}' in '{}'", name, project_dir_name);
     for f in &files {
-        println!("  {}/", f);
+        println!("  {}", f);
     }
+    println!();
+    println!(
+        "Source directory: '{}/'\n\
+         Rename it and set `src` in carrier.toml if you prefer a different name.",
+        name
+    );
 
     Ok(())
 }
