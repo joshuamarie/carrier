@@ -59,7 +59,7 @@ fn parse_dcf(reader: impl BufRead) -> Result<HashMap<String, PackageRecord>> {
 
     let mut name: Option<String> = None;
     let mut version: Option<String> = None;
-    let mut deps: Vec<String> = Vec::new();
+    let mut deps: Vec<(String, String)> = Vec::new();
     let mut in_dep_field = false;
 
     for line in reader.lines() {
@@ -104,7 +104,7 @@ fn flush(
     map: &mut HashMap<String, PackageRecord>,
     name: &mut Option<String>,
     version: &mut Option<String>,
-    deps: &mut Vec<String>,
+    deps: &mut Vec<(String, String)>,
 ) {
     if let (Some(n), Some(v)) = (name.take(), version.take()) {
         // Normalize dashes and truncate to 3 components for semver
