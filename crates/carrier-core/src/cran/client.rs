@@ -9,6 +9,7 @@ use crate::cran::packages::{fetch, fetch_archive_versions, PackageRecord};
 use crate::ops::resolve::ResolvedPackage;
 use crate::version::VersionSpec;
 use crate::paths::{detect_r_platform, RPlatformOs};
+use crate::cran::binary_install;
 
 use std::io::Write as _;
 
@@ -355,42 +356,13 @@ fn try_install_binary(pkg: &str, url: &str, lib_path: &Path) -> Result<()> {
         );
     }
 
-    // Written to a directory carrier controls, not the OS temp dir —
-    // files freshly written to AppData\Local\Temp on Windows can be
-    // locked/scanned by antivirus before R CMD INSTALL reads them,
-    // causing an intermittent "cannot open compressed file" failure.
-    let scratch_dir = dirs::home_dir()
-        .context("Cannot find home directory")?
-        .join(".carrier")
-        .join("tmp");
-    std::fs::create_dir_all(&scratch_dir)
-        .with_context(|| format!("Failed to create scratch dir: {}", scratch_dir.display()))?;
+    let ext = if is_zip { "zip" } else { "tgz" };
+    let mut tmp = tempfile::Builder::new()
+        .suffix(&format!(".{}", ext))
+        .tempfile()
+        .with_context(|| format!("Failed to create temp file for {}", pkg))?;
+    tmp.write_all(&bytes)
+        .with_context(|| format!("Failed to write temp archive for {}", pkg))?;
 
-    let ext = if url.ends_with(".zip") { "zip" } else { "tgz" };
-    let scratch_path = scratch_dir.join(format!("{}.{}", pkg, ext));
-
-    std::fs::write(&scratch_path, &bytes)
-        .with_context(|| format!("Failed to write binary for {}", pkg))?;
-
-    std::fs::create_dir_all(lib_path)
-        .with_context(|| format!("Failed to create lib dir: {}", lib_path.display()))?;
-
-    let lib_arg = format!(
-        "--library={}",
-        lib_path.to_str().context("lib_path contains invalid UTF-8")?
-    );
-
-    let status = std::process::Command::new("R")
-        .args(["CMD", "INSTALL", &lib_arg])
-        .arg(&scratch_path)
-        .status()
-        .with_context(|| format!("Failed to run R CMD INSTALL for binary {} — is R on PATH?", pkg))?;
-
-    let _ = std::fs::remove_file(&scratch_path);
-
-    if !status.success() {
-        anyhow::bail!("R CMD INSTALL failed for binary {} (exit: {})", pkg, status);
-    }
-
-    Ok(())
+    binary_install::install_binary_package(tmp.path(), lib_path, pkg)
 }
