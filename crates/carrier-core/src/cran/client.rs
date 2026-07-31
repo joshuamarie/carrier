@@ -69,10 +69,16 @@ pub fn install_packages(
     std::fs::create_dir_all(lib_path)
         .with_context(|| format!("Failed to create R lib dir: {}", lib_path.display()))?;
 
+    // Shared across all repo groups in this run, so a package appearing as
+    // a transitive dep under more than one repo isn't independently
+    // re-resolved (and potentially silently downgraded) by whichever repo
+    // group happens to process it last.
+    let mut globally_resolved: HashMap<String, (Version, String)> = HashMap::new();
+
     for (repo, pkgs) in &by_repo {
         println!("Fetching package index from {}...", repo);
         let index = fetch(repo)?;
-        let to_install = resolve_install_set(pkgs, &index, repo)?;
+        let to_install = resolve_install_set(pkgs, &index, repo, &mut globally_resolved)?;
         let order = topo_order(&to_install, &index);
 
         for pkg in &order {
@@ -85,18 +91,13 @@ pub fn install_packages(
                     Ok(installed_version) => {
                         if installed_version == resolved.version {
                             println!("  [ok] {} {} (already satisfied)", pkg, installed_version);
+                            globally_resolved.insert(pkg.clone(), (resolved.version.clone(), repo.clone()));
                             continue;
                         }
-                        println!(
-                            "  [switching] {} {} → {}...",
-                            pkg, installed_version, resolved.version
-                        );
+                        println!("  [switching] {} {} → {}...", pkg, installed_version, resolved.version);
                     }
                     Err(_) => {
-                        println!(
-                            "  [reinstalling] {} (could not read installed version)...",
-                            pkg
-                        );
+                        println!("  [reinstalling] {} (could not read installed version)...", pkg);
                     }
                 }
             } else {
@@ -104,7 +105,10 @@ pub fn install_packages(
             }
 
             match download_and_unpack(pkg, &resolved.version.to_string(), repo, lib_path) {
-                Ok(()) => println!("  [done] {} {}", pkg, resolved.version),
+                Ok(()) => {
+                    println!("  [done] {} {}", pkg, resolved.version);
+                    globally_resolved.insert(pkg.clone(), (resolved.version.clone(), repo.clone()));
+                }
                 Err(e) => {
                     let is_direct = pkgs.contains_key(pkg.as_str());
                     if is_direct {
@@ -126,6 +130,7 @@ fn resolve_install_set(
     requested: &BTreeMap<String, String>,
     index: &HashMap<String, PackageRecord>,
     repo_url: &str,
+    globally_resolved: &mut HashMap<String, (Version, String)>,
 ) -> Result<HashMap<String, ResolvedInstall>> {
     let mut result: HashMap<String, ()> = HashMap::new();
     let mut visited: HashSet<String> = HashSet::new();
@@ -167,7 +172,27 @@ fn resolve_install_set(
 
     for pkg in result.keys() {
         let record = &index[pkg];
-        let pkg_specs = match specs.get(pkg) {
+        let pkg_specs = specs.get(pkg);
+
+        // Already resolved by an earlier repo group in this same run —
+        // don't re-resolve independently. Verify it still satisfies what
+        // THIS repo's graph requires; reuse it if so, fail loudly if not.
+        if let Some((existing_version, existing_repo)) = globally_resolved.get(pkg) {
+            if let Some(pkg_specs) = pkg_specs {
+                if VersionSpec::resolve(pkg_specs, std::slice::from_ref(existing_version)).is_none() {
+                    bail!(
+                        "Cross-repo version conflict for '{}': already resolved to {} via {}, \
+                         but {} has constraints that version doesn't satisfy: {}",
+                        pkg, existing_version, existing_repo, repo_url,
+                        pkg_specs.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join(", ")
+                    );
+                }
+            }
+            resolved.insert(pkg.clone(), ResolvedInstall { version: existing_version.clone() });
+            continue;
+        }
+
+        let pkg_specs = match pkg_specs {
             Some(s) => s,
             None => {
                 resolved.insert(pkg.clone(), ResolvedInstall { version: record.version.clone() });
