@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
-use crate::carrier_toml::CarrierToml;
+use crate::carrier_toml::{CarrierToml, DEFAULT_CRAN_MIRROR};
 use crate::formats::{rmbx, tar};
 use crate::manifest::{Dependencies, Manifest};
 
@@ -75,12 +75,20 @@ fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
         packages: toml.package_deps
             .clone()
             .unwrap_or_default()
-            .into_keys()
+            .into_iter()
+            .map(|(name, dep)| {
+                let repo = dep.repo();
+                crate::manifest::PackageDepEntry {
+                    name,
+                    version: dep.version().to_owned(),
+                    repo: if repo == DEFAULT_CRAN_MIRROR { None } else { Some(repo.to_owned()) },
+                }
+            })
             .collect(),
         modules: toml.module_deps
             .clone()
             .unwrap_or_default()
-            .into_keys()
+            .into_iter()
             .collect(),
     };
 

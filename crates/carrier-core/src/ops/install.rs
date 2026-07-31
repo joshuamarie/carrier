@@ -121,7 +121,13 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
     let package_deps = Some(
         manifest.dependencies.packages
             .into_iter()
-            .map(|n| (n, PackageDep::Simple("*".to_owned())))
+            .map(|entry| {
+                let dep = match entry.repo {
+                    Some(repo) => PackageDep::Extended { version: entry.version, repo: Some(repo) },
+                    None => PackageDep::Simple(entry.version),
+                };
+                (entry.name, dep)
+            })
             .collect()
     );
 

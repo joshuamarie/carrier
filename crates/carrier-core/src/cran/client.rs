@@ -1,19 +1,24 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 // use flate2::read::GzDecoder;
 use semver::Version;
 
-use crate::cran::packages::{fetch, PackageRecord};
+use crate::cran::packages::{fetch, fetch_archive_versions, PackageRecord};
 use crate::ops::resolve::ResolvedPackage;
-use crate::version::{check_conflicts, VersionSpec};
+use crate::version::VersionSpec;
+
 use std::io::Write as _;
 
-fn topo_order(to_install: &HashMap<String, &PackageRecord>) -> Vec<String> {
+fn topo_order(
+    to_install: &HashMap<String, ResolvedInstall>,
+    index: &HashMap<String, PackageRecord>,
+) -> Vec<String> {
     fn visit(
         pkg: &str,
-        to_install: &HashMap<String, &PackageRecord>,
+        to_install: &HashMap<String, ResolvedInstall>,
+        index: &HashMap<String, PackageRecord>,
         visited: &mut HashSet<String>,
         order: &mut Vec<String>,
     ) {
@@ -21,20 +26,26 @@ fn topo_order(to_install: &HashMap<String, &PackageRecord>) -> Vec<String> {
             return;
         }
         visited.insert(pkg.to_owned());
-        if let Some(record) = to_install.get(pkg) {
-            for (dep, _) in &record.deps {
-                visit(dep, to_install, visited, order);
+        if to_install.contains_key(pkg) {
+            if let Some(record) = index.get(pkg) {
+                for (dep, _) in &record.deps {
+                    visit(dep, to_install, index, visited, order);
+                }
             }
-            order.push(pkg.to_owned());   // moved inside the `if let Some` — only push resolved packages
+            order.push(pkg.to_owned());
         }
     }
 
     let mut visited = HashSet::new();
     let mut order = Vec::new();
     for pkg in to_install.keys() {
-        visit(pkg, to_install, &mut visited, &mut order);
+        visit(pkg, to_install, index, &mut visited, &mut order);
     }
     order
+}
+
+struct ResolvedInstall {
+    version: Version,
 }
 
 /// Install a set of resolved R packages into `lib_path`.
@@ -45,7 +56,6 @@ pub fn install_packages(
     packages: &BTreeMap<String, ResolvedPackage>,
     lib_path: &Path,
 ) -> Result<()> {
-    // Group packages by repo
     let mut by_repo: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for (name, pkg) in packages {
         by_repo
@@ -61,33 +71,23 @@ pub fn install_packages(
         println!("Fetching package index from {}...", repo);
         let index = fetch(repo)?;
         let to_install = resolve_install_set(pkgs, &index, repo)?;
+        let order = topo_order(&to_install, &index);
 
-        let order = topo_order(&to_install);
         for pkg in &order {
-            let record = to_install[pkg];
+            let resolved = &to_install[pkg];
             let pkg_dir = lib_path.join(pkg);
 
             if pkg_dir.is_dir() {
                 let desc_path = pkg_dir.join("DESCRIPTION");
                 match read_installed_version(&desc_path) {
                     Ok(installed_version) => {
-                        let spec_str = pkgs
-                            .get(pkg.as_str())
-                            .map(|s| s.as_str())
-                            .unwrap_or("*");
-                        let spec = VersionSpec::parse(spec_str)?;
-
-                        if spec.matches(&installed_version) {
-                            println!(
-                                "  [ok] {} {} (already satisfied)",
-                                pkg, installed_version
-                            );
+                        if installed_version == resolved.version {
+                            println!("  [ok] {} {} (already satisfied)", pkg, installed_version);
                             continue;
                         }
-
                         println!(
-                            "  [upgrading] {} {} → {}...",
-                            pkg, installed_version, record.version
+                            "  [switching] {} {} → {}...",
+                            pkg, installed_version, resolved.version
                         );
                     }
                     Err(_) => {
@@ -98,11 +98,11 @@ pub fn install_packages(
                     }
                 }
             } else {
-                println!("  [installing] {} {}...", pkg, record.version);
+                println!("  [installing] {} {}...", pkg, resolved.version);
             }
 
-            match download_and_unpack(pkg, &record.version.to_string(), repo, lib_path) {
-                Ok(()) => println!("  [done] {} {}", pkg, record.version),
+            match download_and_unpack(pkg, &resolved.version.to_string(), repo, lib_path) {
+                Ok(()) => println!("  [done] {} {}", pkg, resolved.version),
                 Err(e) => {
                     let is_direct = pkgs.contains_key(pkg.as_str());
                     if is_direct {
@@ -120,12 +120,12 @@ pub fn install_packages(
 
 /// Walk the dep graph breadth-first, validating version specs against the
 /// index and collecting the full set of packages to install.
-fn resolve_install_set<'a>(
+fn resolve_install_set(
     requested: &BTreeMap<String, String>,
-    index: &'a HashMap<String, PackageRecord>,
+    index: &HashMap<String, PackageRecord>,
     repo_url: &str,
-) -> Result<HashMap<String, &'a PackageRecord>> {
-    let mut result: HashMap<String, &PackageRecord> = HashMap::new();
+) -> Result<HashMap<String, ResolvedInstall>> {
+    let mut result: HashMap<String, ()> = HashMap::new();
     let mut visited: HashSet<String> = HashSet::new();
     let mut queue: VecDeque<String> = VecDeque::new();
     let mut specs: HashMap<String, Vec<VersionSpec>> = HashMap::new();
@@ -135,8 +135,6 @@ fn resolve_install_set<'a>(
         queue.push_back(pkg.clone());
     }
 
-    // First pass: walk the full graph, collecting every spec placed
-    // on each package before checking any of them.
     while let Some(pkg) = queue.pop_front() {
         if visited.contains(&pkg) {
             continue;
@@ -151,7 +149,7 @@ fn resolve_install_set<'a>(
             }
         };
 
-        result.insert(pkg.clone(), record);
+        result.insert(pkg.clone(), ());
 
         for (dep, dep_spec_str) in &record.deps {
             if let Ok(dep_spec) = VersionSpec::parse(dep_spec_str) {
@@ -163,16 +161,43 @@ fn resolve_install_set<'a>(
         }
     }
 
-    // Second pass: every package now has its complete spec list, so
-    // conflicts between direct and transitive requirers are caught here.
-    for (pkg, record) in &result {
-        if let Some(pkg_specs) = specs.get(pkg) {
-            check_conflicts(pkg, pkg_specs, std::slice::from_ref(&record.version))
-                .with_context(|| format!("resolving '{}' from {}", pkg, repo_url))?;
+    let mut resolved: HashMap<String, ResolvedInstall> = HashMap::new();
+
+    for pkg in result.keys() {
+        let record = &index[pkg];
+        let pkg_specs = match specs.get(pkg) {
+            Some(s) => s,
+            None => {
+                resolved.insert(pkg.clone(), ResolvedInstall { version: record.version.clone() });
+                continue;
+            }
+        };
+
+        if VersionSpec::resolve(pkg_specs, std::slice::from_ref(&record.version)).is_some() {
+            resolved.insert(pkg.clone(), ResolvedInstall { version: record.version.clone() });
+            continue;
+        }
+
+        println!("  [checking] {} — index version doesn't satisfy constraints, searching archive...", pkg);
+        let archive_versions = fetch_archive_versions(repo_url, pkg)
+            .with_context(|| format!("fetching archive versions for '{}'", pkg))?;
+
+        match VersionSpec::resolve(pkg_specs, &archive_versions) {
+            Some(v) => {
+                resolved.insert(pkg.clone(), ResolvedInstall { version: v.clone() });
+            }
+            None => {
+                bail!(
+                    "Version conflict for '{}': no version (including archive) satisfies all constraints.\n\
+                     Constraints: {}",
+                    pkg,
+                    pkg_specs.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join(", ")
+                );
+            }
         }
     }
 
-    Ok(result)
+    Ok(resolved)
 }
 
 /// Read the installed version of a package from its `DESCRIPTION` file.
@@ -248,8 +273,6 @@ fn download_and_unpack(
     let bytes = response.bytes()
         .with_context(|| format!("Failed to read bytes for {}", pkg))?;
 
-    // Write to a temp .tar.gz file — R CMD INSTALL needs a real file path,
-    // not a stream, and needs the .tar.gz extension to recognize the format.
     let mut tmp = tempfile::Builder::new()
         .suffix(".tar.gz")
         .tempfile()
@@ -265,15 +288,9 @@ fn download_and_unpack(
         "--library={}",
         lib_path.to_str().context("lib_path contains invalid UTF-8")?
     );
-    
+
     let status = std::process::Command::new("R")
-        .args([
-            "CMD", "INSTALL",
-            "--no-multiarch",
-            "--no-docs",
-            "--no-help",
-            &lib_arg,
-        ])
+        .args(["CMD", "INSTALL", "--no-multiarch", "--no-docs", "--no-help", &lib_arg])
         .arg(tmp_path)
         .status()
         .with_context(|| format!("Failed to run R CMD INSTALL for {} — is R on PATH?", pkg))?;

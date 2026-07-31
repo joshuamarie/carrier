@@ -54,6 +54,60 @@ pub fn fetch(repo_url: &str) -> Result<HashMap<String, PackageRecord>> {
     Err(last_err.unwrap())
 }
 
+/// Fetch all archived versions of a package from CRAN's Archive/ HTML index.
+/// Returns versions sorted newest-first. An empty result (rather than an
+/// error) means the package simply has no archive — not every package does.
+pub fn fetch_archive_versions(repo_url: &str, pkg: &str) -> Result<Vec<Version>> {
+    let url = format!(
+        "{}/src/contrib/Archive/{}/",
+        repo_url.trim_end_matches('/'),
+        pkg
+    );
+
+    let response = reqwest::blocking::get(&url)
+        .with_context(|| format!("Failed to fetch archive listing: {}", url))?;
+
+    if !response.status().is_success() {
+        return Ok(Vec::new());
+    }
+
+    let body = response.text()
+        .with_context(|| format!("Failed to read archive listing body: {}", url))?;
+
+    Ok(parse_archive_listing(&body, pkg))
+}
+
+/// Parse an Apache-style HTML directory listing for `{pkg}_{version}.tar.gz`
+/// links. Deliberately a simple substring scan rather than a full HTML
+/// parser — CRAN's Archive listings are consistently plain `<a href="...">`
+/// tags, so this avoids pulling in an HTML parsing dependency for one job.
+fn parse_archive_listing(html: &str, pkg: &str) -> Vec<Version> {
+    let prefix = format!("{}_", pkg);
+    let mut versions = Vec::new();
+
+    for part in html.split("href=\"") {
+        let Some(end) = part.find('"') else { continue };
+        let href = &part[..end];
+
+        let Some(name) = href.strip_suffix(".tar.gz") else { continue };
+        let Some(ver_str) = name.strip_prefix(&prefix) else { continue };
+
+        let normalized = ver_str.replace('-', ".");
+        let truncated = normalized
+            .splitn(4, '.')
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(".");
+
+        if let Ok(v) = Version::parse(&truncated) {
+            versions.push(v);
+        }
+    }
+
+    versions.sort_by(|a, b| b.cmp(a));
+    versions
+}
+
 fn parse_dcf(reader: impl BufRead) -> Result<HashMap<String, PackageRecord>> {
     let mut map = HashMap::new();
 

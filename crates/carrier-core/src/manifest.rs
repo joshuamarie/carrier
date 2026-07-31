@@ -18,13 +18,21 @@ pub struct Manifest {
     pub bundled_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PackageDepEntry {
+    pub name: String,
+    pub version: String,
+    /// None means the default CRAN mirror.
+    pub repo: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Dependencies {
     /// Every 'box' modules uses R packages
     /// Write R package deps through e.g. ["dplyr", "stringr"])
-    pub packages: Vec<String>,
+    pub packages: Vec<PackageDepEntry>,
     /// Then other carrier modules required (e.g. ["utils/helpers"])
-    pub modules: Vec<String>,
+    pub modules: Vec<(String, String)>,
 }
 
 impl Manifest {
