@@ -19,6 +19,43 @@ pub fn resolve_install_dir() -> Result<PathBuf> {
     Ok(global)
 }
 
+pub struct RPlatform {
+    pub os: RPlatformOs,
+    pub r_version_short: String,
+}
+
+pub enum RPlatformOs {
+    Windows,
+    MacOs,
+    Other,
+}
+
+pub fn detect_r_platform() -> Result<RPlatform> {
+    let os = if cfg!(target_os = "windows") {
+        RPlatformOs::Windows
+    } else if cfg!(target_os = "macos") {
+        RPlatformOs::MacOs
+    } else {
+        RPlatformOs::Other
+    };
+
+    let output = std::process::Command::new("Rscript")
+        .args(["-e", "cat(paste(R.version$major, strsplit(R.version$minor, '.', fixed=TRUE)[[1]][1], sep='.'))"])
+        .output()
+        .context("Failed to run Rscript to detect R version — is R installed and on PATH?")?;
+
+    let r_version_short = String::from_utf8(output.stdout)
+        .context("Rscript output was not valid UTF-8")?
+        .trim()
+        .to_owned();
+
+    if r_version_short.is_empty() {
+        anyhow::bail!("Could not determine R version from Rscript output");
+    }
+
+    Ok(RPlatform { os, r_version_short })
+}
+
 /// Resolves the R user library path where R packages should be installed.
 ///
 /// Priority:

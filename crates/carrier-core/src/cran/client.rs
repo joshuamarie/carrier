@@ -8,6 +8,7 @@ use semver::Version;
 use crate::cran::packages::{fetch, fetch_archive_versions, PackageRecord};
 use crate::ops::resolve::ResolvedPackage;
 use crate::version::VersionSpec;
+use crate::paths::{detect_r_platform, RPlatformOs};
 
 use std::io::Write as _;
 
@@ -227,6 +228,22 @@ fn download_and_unpack(
     repo_url: &str,
     lib_path: &Path,
 ) -> Result<()> {
+    let platform = detect_r_platform();
+    
+    if let Ok(platform) = &platform {
+        if let Some(binary_url) = binary_url_for(pkg, version, repo_url, platform) {
+            match try_install_binary(pkg, &binary_url, lib_path) {
+                Ok(()) => {
+                    println!("  [binary] {} {} (no compilation needed)", pkg, version);
+                    return Ok(());
+                }
+                Err(e) => {
+                    eprintln!("  [warn] binary install failed for {} ({}), falling back to source...", pkg, e);
+                }
+            }
+        }
+    }
+    
     let primary_url = format!(
         "{}/src/contrib/{}_{}.tar.gz",
         repo_url.trim_end_matches('/'),
@@ -297,6 +314,82 @@ fn download_and_unpack(
 
     if !status.success() {
         anyhow::bail!("R CMD INSTALL failed for {} {} (exit: {})", pkg, version, status);
+    }
+
+    Ok(())
+}
+
+fn binary_url_for(pkg: &str, version: &str, repo_url: &str, platform: &crate::paths::RPlatform) -> Option<String> {
+    let base = repo_url.trim_end_matches('/');
+    match platform.os {
+        RPlatformOs::Windows => Some(format!(
+            "{}/bin/windows/contrib/{}/{}_{}.zip",
+            base, platform.r_version_short, pkg, version
+        )),
+        RPlatformOs::MacOs => Some(format!(
+            "{}/bin/macosx/contrib/{}/{}_{}.tgz",
+            base, platform.r_version_short, pkg, version
+        )),
+        // On Linux, CRAN has no generic binaries, always source
+        RPlatformOs::Other => None, 
+    }
+}
+
+fn try_install_binary(pkg: &str, url: &str, lib_path: &Path) -> Result<()> {
+    let response = reqwest::blocking::get(url)
+        .with_context(|| format!("Failed to download binary: {}", url))?;
+
+    if !response.status().is_success() {
+        anyhow::bail!("HTTP {} downloading binary {}", response.status(), url);
+    }
+
+    let bytes = response.bytes()
+        .with_context(|| format!("Failed to read binary bytes for {}", pkg))?;
+
+    let is_zip = bytes.starts_with(b"PK");
+    let is_gzip = bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
+    if !is_zip && !is_gzip {
+        anyhow::bail!(
+            "Response for {} was not a valid archive (likely no binary available for this version)",
+            pkg
+        );
+    }
+
+    // Written to a directory carrier controls, not the OS temp dir —
+    // files freshly written to AppData\Local\Temp on Windows can be
+    // locked/scanned by antivirus before R CMD INSTALL reads them,
+    // causing an intermittent "cannot open compressed file" failure.
+    let scratch_dir = dirs::home_dir()
+        .context("Cannot find home directory")?
+        .join(".carrier")
+        .join("tmp");
+    std::fs::create_dir_all(&scratch_dir)
+        .with_context(|| format!("Failed to create scratch dir: {}", scratch_dir.display()))?;
+
+    let ext = if url.ends_with(".zip") { "zip" } else { "tgz" };
+    let scratch_path = scratch_dir.join(format!("{}.{}", pkg, ext));
+
+    std::fs::write(&scratch_path, &bytes)
+        .with_context(|| format!("Failed to write binary for {}", pkg))?;
+
+    std::fs::create_dir_all(lib_path)
+        .with_context(|| format!("Failed to create lib dir: {}", lib_path.display()))?;
+
+    let lib_arg = format!(
+        "--library={}",
+        lib_path.to_str().context("lib_path contains invalid UTF-8")?
+    );
+
+    let status = std::process::Command::new("R")
+        .args(["CMD", "INSTALL", &lib_arg])
+        .arg(&scratch_path)
+        .status()
+        .with_context(|| format!("Failed to run R CMD INSTALL for binary {} — is R on PATH?", pkg))?;
+
+    let _ = std::fs::remove_file(&scratch_path);
+
+    if !status.success() {
+        anyhow::bail!("R CMD INSTALL failed for binary {} (exit: {})", pkg, status);
     }
 
     Ok(())
