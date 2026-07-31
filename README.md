@@ -41,7 +41,7 @@ If you know the structure of Python packages, this feels familiar to you.
 
 `carrier` has few commands to manage the modules. 
 
-*Note: `<name-of-the-module>` is a placeholder. Apply a valid name. *
+*Note: `<name-of-the-module>` is a placeholder. Apply a valid name.*
 
 1.  Either initiate an R module by own, or use `carrier init <name-of-the-module>` command: 
 
@@ -64,7 +64,7 @@ If you know the structure of Python packages, this feels familiar to you.
     or install the module from a GitHub repo:
 
     ``` bash
-    carrier install gh:username/<name-of-the-module>
+    carrier install gh:username/<path-of-the-module>
     ```
     
     <!-- By default, it installs the module, locally, but you can install the module globally: -->
@@ -86,7 +86,7 @@ If you know the structure of Python packages, this feels familiar to you.
 Here's an example: 
 
 ```r
-# carrier install gh:joshuamarie/convert-proj/convert
+# carrier install gh:joshuamarie/carrier/tree/main/convert-proj
 box::use(cv = convert)
 cv$mass$mass_conversion_table(1000)
 ```
