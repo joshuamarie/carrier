@@ -16,6 +16,14 @@ To install the development version of `carrier` from GitHub, one requires [Rust]
 cargo install --git https://github.com/joshuamarie/carrier
 ```
 
+Then install the particular main dependency `{box}`. In a meantime, kindly install the package from the forked repo, as the patches for `carrier` support are written down there:
+
+``` r
+# Install the package through GitHub
+# install.packages('pak')
+pak::pak("joshuamarie/box@carrier-module-support")
+```
+
 ## Requirements
 
 The idea for a distributable module is simple. Similar to Python, the usual structure of `box` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.R` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from R works.  
