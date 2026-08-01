@@ -37,7 +37,11 @@ else
 fi
 
 echo "Fetching download URL for $arch-$os_pattern..."
+<<<<<<< HEAD
 github_response=$(curl -s "$api_url")
+=======
+github_response=$(curl -s https://api.github.com/repos/joshuamarie/carrier/releases/latest)
+>>>>>>> abb93f70f5f522074ebe094324cc788b98a8099c
 asset_url=$(echo "$github_response" | grep -o "https://github.com/joshuamarie/carrier/releases/download/[^\"]*$arch-$os_pattern.$ext\"" | head -n 1)
 asset_url="${asset_url%\"}"
 
