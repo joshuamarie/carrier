@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
 
+$DefaultVersion = "__VERSION__"
+
 $InstallDir = "$env:USERPROFILE\.local\bin"
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
@@ -9,12 +11,25 @@ $arch = if ([System.Environment]::Is64BitOperatingSystem) { "x86_64" } else {
 }
 $target = "$arch-pc-windows-msvc"
 
+$version = $env:CARRIER_VERSION
+if (-not $version -and $DefaultVersion -ne "__VERSION__") {
+    $version = $DefaultVersion
+}
+
+if ($version) {
+    Write-Host "Fetching release $version..."
+    $apiUrl = "https://api.github.com/repos/joshuamarie/carrier/releases/tags/$version"
+} else {
+    Write-Host "Fetching latest release..."
+    $apiUrl = "https://api.github.com/repos/joshuamarie/carrier/releases/latest"
+}
+
 Write-Host "Fetching download URL for $target..."
-$release = Invoke-RestMethod -Uri "https://api.github.com/repos/joshuamarie/carrier/releases/latest"
+$release = Invoke-RestMethod -Uri $apiUrl
 $asset = $release.assets | Where-Object { $_.name -like "*$target.zip" } | Select-Object -First 1
 
 if (-not $asset) {
-    Write-Error "No release asset found for $target. Check https://github.com/joshuamarie/carrier/releases/latest"
+    Write-Error "No release asset found for $target."
     exit 1
 }
 

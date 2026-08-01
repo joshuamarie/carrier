@@ -19,11 +19,19 @@ jobs:
     needs: [linux, mac, windows]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: artifacts-*
           merge-multiple: true
+
+      - name: "Render installer scripts"
+        run: |
+          sed "s/__VERSION__/${GITHUB_REF_NAME}/" scripts/install.sh > carrier-installer.sh
+          sed "s/__VERSION__/${GITHUB_REF_NAME}/" scripts/install.ps1 > carrier-installer.ps1
+          chmod +x carrier-installer.sh
 
       - name: "Publish release"
         uses: softprops/action-gh-release@v2
@@ -33,3 +41,5 @@ jobs:
             artifacts/*.tar.gz
             artifacts/*.zip
             artifacts/*.sha256
+            carrier-installer.sh
+            carrier-installer.ps1

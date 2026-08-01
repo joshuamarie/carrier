@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+DEFAULT_VERSION="__VERSION__"
+
 mkdir -p ~/.local/bin && cd ~/.local/bin
 
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -15,21 +17,32 @@ case "$os" in
     ext="zip"
     if ! command -v unzip >/dev/null 2>&1; then
       echo "Error: 'unzip' not found in this Git Bash environment." >&2
-      echo "Run the Windows installer directly in PowerShell instead:" >&2
-      echo "  irm https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.ps1 | iex" >&2
       exit 1
     fi
     ;;
   *) echo "Unsupported OS: $os" >&2; exit 1 ;;
 esac
 
+version="${CARRIER_VERSION:-}"
+if [ -z "$version" ] && [ "$DEFAULT_VERSION" != "__VERSION__" ]; then
+    version="$DEFAULT_VERSION"
+fi
+
+if [ -n "$version" ]; then
+    echo "Fetching release $version..."
+    api_url="https://api.github.com/repos/joshuamarie/carrier/releases/tags/$version"
+else
+    echo "Fetching latest release..."
+    api_url="https://api.github.com/repos/joshuamarie/carrier/releases/latest"
+fi
+
 echo "Fetching download URL for $arch-$os_pattern..."
-github_response=$(curl -s https://api.github.com/repos/joshuamarie/carrier/releases/latest)
-asset_url=$(echo "$github_response" | grep -o "https://github.com/joshuamarie/carrier/releases/download/[^\"]*$arch-$os_pattern.$ext")
+github_response=$(curl -s "$api_url")
+asset_url=$(echo "$github_response" | grep -o "https://github.com/joshuamarie/carrier/releases/download/[^\"]*$arch-$os_pattern.$ext\"" | head -n 1)
+asset_url="${asset_url%\"}"
 
 if [ -z "$asset_url" ]; then
     echo "Error: no release asset found for $arch-$os_pattern." >&2
-    echo "Check https://github.com/joshuamarie/carrier/releases/latest" >&2
     exit 1
 fi
 
@@ -48,18 +61,14 @@ chmod +x carrier* 2>/dev/null || true
 echo "carrier installed to ~/.local/bin"
 
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    echo "Adding ~/.local/bin to your PATH..."
     if [[ "$SHELL" == *"bash"* ]]; then
         printf '\n%s\n' 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-        echo "Please source ~/.bashrc or open a new terminal."
     elif [[ "$SHELL" == *"zsh"* ]]; then
         printf '\n%s\n' 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-        echo "Please source ~/.zshrc or open a new terminal."
     elif [[ "$SHELL" == *"fish"* ]]; then
         printf '\n%s\n' 'fish_add_path "$HOME/.local/bin"' >> ~/.config/fish/config.fish
-    else
-        echo "Could not detect shell. Add ~/.local/bin to your PATH manually."
     fi
+    echo "Please restart your terminal, or source your shell config."
 else
     echo "~/.local/bin is already in your PATH."
 fi
