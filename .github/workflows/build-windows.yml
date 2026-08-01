@@ -37,6 +37,7 @@ jobs:
         run: cargo build --release --locked --target ${{ matrix.this.target }} -p carrier
         
       - name: "Smoke test"
+        shell: bash
         run: |
           target/${{ matrix.this.target }}/release/carrier --version
           target/${{ matrix.this.target }}/release/carrier --help > /dev/null
