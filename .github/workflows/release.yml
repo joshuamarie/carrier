@@ -1,0 +1,35 @@
+name: "Release"
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    uses: ./.github/workflows/build-linux.yml
+  mac:
+    uses: ./.github/workflows/build-mac.yml
+  windows:
+    uses: ./.github/workflows/build-windows.yml
+
+  release:
+    needs: [linux, mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: artifacts-*
+          merge-multiple: true
+
+      - name: "Publish release"
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/*.sha256
