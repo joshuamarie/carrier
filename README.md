@@ -4,11 +4,25 @@
 
 A module manager for [`{box}`](https://klmr.me/box/) modules.
 
-`carrier` lets `box` modules bundled as `.rmbx` files, install them, and make the modules much more easily distributed. This is similar to Python's `pip` or `npm`.
+`carrier` is another package manager for R, built in Rust, exclusive for `{box}` modules. The tasks it handle involves bundling and installment. The entire purpose of `carrier` is to make the packaging for `{box}` modules possible and to be easily distributed. The interface of `carrier` is similar to Python's `pip`.
 
 ## Installation
 
-Pre-built binaries for Linux, macOS, and Windows will be available on the [Releases](https://github.com/joshuamarie/carrier/releases) page once the project reaches a stable release.
+`carrier` is a command line interface (CLI) tool built in Rust. Pre-built binaries for Linux, macOS, and Windows is available on the [Releases](https://github.com/joshuamarie/carrier/releases).
+
+You can install `carrier` using the Shell installers. 
+
+1.  On Linux / macOS:
+
+    ``` bash
+    curl -sSL https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.sh | bash
+    ```
+
+2.  On Windows: 
+
+    ``` bash
+    powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.ps1 | iex"
+    ```
 
 To install the development version of `carrier` from GitHub, one requires [Rust](https://www.rust-lang.org/tools/install) (stable toolchain), particularly `rustc` and `cargo` on your system to compile it from source.
 
