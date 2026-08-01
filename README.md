@@ -1,6 +1,8 @@
 # carrier
 
-> 🚧️ This project is under active development. Expect breaking changes.🚧
+[![Build](https://github.com/joshuamarie/carrier/actions/workflows/build.yml/badge.svg)](https://github.com/joshuamarie/carrier/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/joshuamarie/carrier)](https://github.com/joshuamarie/carrier/releases)
+[![License](https://img.shields.io/github/license/joshuamarie/carrier)](https://github.com/joshuamarie/carrier/blob/main/LICENSE.md)
 
 A module manager for [`{box}`](https://klmr.me/box/) modules.
 
