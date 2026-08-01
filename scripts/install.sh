@@ -25,7 +25,8 @@ esac
 
 echo "Fetching download URL for $arch-$os_pattern..."
 github_response=$(curl -s https://api.github.com/repos/joshuamarie/carrier/releases/latest)
-asset_url=$(echo "$github_response" | grep -o "https://github.com/joshuamarie/carrier/releases/download/[^\"]*$arch-$os_pattern.$ext")
+asset_url=$(echo "$github_response" | grep -o "https://github.com/joshuamarie/carrier/releases/download/[^\"]*$arch-$os_pattern.$ext\"" | head -n 1)
+asset_url="${asset_url%\"}"
 
 if [ -z "$asset_url" ]; then
     echo "Error: no release asset found for $arch-$os_pattern." >&2
