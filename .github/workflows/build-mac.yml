@@ -35,6 +35,11 @@ jobs:
 
       - name: "Build"
         run: cargo build --release --locked --target ${{ matrix.this.target }} -p carrier
+        
+      - name: "Smoke test"
+        run: |
+          target/${{ matrix.this.target }}/release/carrier --version
+          target/${{ matrix.this.target }}/release/carrier --help > /dev/null 
 
       - name: "Archive"
         run: |
