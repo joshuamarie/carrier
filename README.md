@@ -77,7 +77,7 @@ If you know the structure of Python packages, this feels familiar to you.
 
 *Note: `<name-of-the-module>` is a placeholder. Apply a valid name.*
 
-1.  Either initiate an R module by own, or use `carrier init <name-of-the-module>` command: 
+1.  Either initiate an R module with `carrier.toml` metadata file by own, or use `carrier init <name-of-the-module>` command: 
 
     ``` bash
     carrier init <name-of-the-module>
@@ -115,7 +115,7 @@ If you know the structure of Python packages, this feels familiar to you.
 
 ## Using installed modules
 
-`carrier` syncs with `{box}` R package (this includes the syntax). The `box::use()` automatically resolves the path where the installed modules belong.
+There are patches along the source code of `{box}`. This way, `carrier` syncs with `{box}` R package (this includes the syntax). The `box::use()` automatically resolves the path where the installed modules belong.
 
 Here's an example: 
 
