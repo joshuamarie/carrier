@@ -13,8 +13,12 @@ title: "carrier.toml"
 | `description` | string | yes | May be empty. |
 | `authors` | array | yes | See [Authors](#authors) below. |
 | `license` | string | yes | |
-| `r_version` | string | yes | Declarative minimum R version. See the note in [Known Gaps](../internals/known-gaps.qmd) — nothing currently checks this against the running R installation. |
+| `r_version` | string | yes | Declarative minimum R version |
 | `src` | string | no | Path to the source directory, relative to the project root. Defaults to a directory named exactly `name`. Whatever directory is used, it must contain `__init__.R`. |
+
+::: {.callout-note title="Technical Notes"}
+For `r_version`, it is carried into the archive manifest, but it is not currently checked against the R installation running `carrier install`.
+:::
 
 ### Authors
 
@@ -61,7 +65,9 @@ Maps a `carrier`-installed module name to a version requirement string, using th
 other_module = "*"
 ```
 
-Transitive resolution for module dependencies is not yet implemented — see [Known Gaps](../internals/known-gaps.qmd).
+::: {.callout-note title="Technical Notes"}
+Version constraints here are not enforced yet. `carrier install` currently resolves every `module_deps` entry to `latest` regardless of what's written. That's because `module_deps` hasn't established its design, yet, as its possible monorepo (like CRAN) hasn't built, yet. Thus, treat this table as documentation of intent for now, not a version pin.
+:::
 
 ## `[test]`
 

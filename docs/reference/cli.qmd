@@ -15,7 +15,7 @@ carrier init <name> [--dir-name <dir>]
 | `<name>` | Module name. Used as the default project directory (`<name>-proj`), the default source directory name, and the `name` field in `carrier.toml`. |
 | `--dir-name <dir>` | Override the project directory name. |
 
-Fails if the target directory already exists. Creates `carrier.toml`, `README.md`, and `<name>/__init__.R`.
+Once the command is executed, it then creates `carrier.toml`, `README.md`, and `<name>/__init__.R`. Fails if the target directory already exists. 
 
 ## `carrier bundle`
 
@@ -25,10 +25,14 @@ carrier bundle <path> [--rmbx]
 
 | Argument | Description |
 |---|---|
-| `<path>` | Project root — the directory containing `carrier.toml`. Usually `.`. |
+| `<path>` | Project root (the directory containing `carrier.toml`). Usually `.`. |
 | `--rmbx` | Produce a `.rmbx` archive instead of the default `.tar.gz`. |
 
-Reads `carrier.toml`, resolves the source directory (see [Module Structure](module-structure.qmd)), and writes `<name>_<version>.<ext>` to the current working directory. Fails if the source directory has no files, or if `carrier.toml` is missing or malformed.
+::: {.callout-note title="Technical Notes"}
+Do not bundle anything to `.rmbx`, yet. It is supposedly an analogue for `.whl` in Python and planned to be scrapped
+:::
+
+This command reads `carrier.toml`, then resolves the source directory (see [Module Structure](module-structure.qmd)), and writes `<name>_<version>.<ext>` to the current working directory. It fails if the source directory has no files, or if `carrier.toml` is missing or malformed.
 
 ## `carrier install`
 
@@ -38,12 +42,12 @@ carrier install <source> [--install-deps]
 
 | Argument | Description |
 |---|---|
-| `<source>` | One of: a directory containing `carrier.toml`, a `.tar.gz` archive, a `.rmbx` archive, or `gh:user/repo` (optionally `gh:user/repo/tree/branch/subpath`). |
+| `<source>` | One of: a directory containing `carrier.toml`, a `.tar.gz` archive, or `gh:user/repo` (optionally `gh:user/repo/tree/branch/subpath`). |
 | `--install-deps` | Actually install resolved R package dependencies from CRAN, rather than only printing the plan. |
 
 Any existing install of the same module name is replaced. The `[package_deps]` / `[module_deps]` in `carrier.toml` are resolved and printed regardless of `--install-deps`; without the flag, R packages are planned but not fetched.
 
-`gh:` sources require the `network` feature on `carrier-core` — see [Installation](../installation.qmd).
+`gh:` sources require the `network` feature on `carrier-core`. See [Installation](../installation.qmd). The GitHub tarball fetch is unauthenticated, so repeated `gh:` installs in a short window (e.g. CI) can hit GitHub's rate limit. Right now, it shows up as a plain HTTP-status error, rather than a rate-limit-specific message.
 
 ## `carrier remove`
 
