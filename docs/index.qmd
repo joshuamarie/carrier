@@ -7,7 +7,7 @@ subtitle: "A package manager for {box} modules"
 
 A `{box}` module distributed through `carrier` carries one extra file at its root: `carrier.toml`. It is a metadata file that plays the same role `DESCRIPTION` plays for an R package or `pyproject.toml` plays for a Python package (name, version, license, authors, and both R package and `{box}` module dependencies).
 
-Example structure: 
+To emulate, please refer an example `convert-proj` structure from this [repo](https://github.com/joshuamarie/carrier/tree/main/convert-proj): 
 
 ```
 convert-proj/
