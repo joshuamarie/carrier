@@ -1,0 +1,33 @@
+---
+title: "carrier"
+subtitle: "A package manager for {box} modules"
+---
+
+`carrier` is a command-line package manager for [`{box}`](https://klmr.me/box/) modules, written in Rust. `{box}` gives R a proper module system; `carrier` gives those modules a way to be packaged, versioned, and distributed. The interface and usage is deliberately close to Python's `pip`.
+
+A `{box}` module distributed through `carrier` carries one extra file at its root: `carrier.toml`. It plays the same role `DESCRIPTION` plays for an R package or `pyproject.toml` plays for a Python package (name, version, license, authors, and both R package and `{box}` module dependencies).
+
+Example structure: 
+
+```
+convert-proj/
+├── carrier.toml
+├── README.md
+└── convert/
+    ├── __init__.R
+    ├── mass/
+    └── temp/
+```
+
+## What carrier does
+
+- `init` (Optional): scaffold a new module with a `carrier.toml` and an `__init__.R` entry point.
+- `bundle`: package a module directory into a `.tar.gz` archive, with a `manifest.json` built from `carrier.toml`. *Disclaimer: `.rmbx` format is something similar to `.whl` in Python and hasn't finalized, yet.*
+- `install`: install a bundled archive, a local module directory, or a module living in a GitHub repo (`gh:user/repo`), and optionally resolve its R package dependencies from CRAN.
+- `remove`: uninstall a module.
+
+## Where this fits
+
+`carrier` doesn't replace `{box}`; it sits in front of it. Once a module is installed, `box::use()` resolves it the same way it resolves any other module — see [Installation](installation.qmd) for the patched `{box}` fork this currently requires.
+
+Start with [Get Started](getting-started.qmd) for a full walkthrough, or jump to the [CLI reference](reference/cli.qmd) if you already know what you're doing.

@@ -1,0 +1,59 @@
+project:
+    type: website
+    output-dir: carrier_site
+
+website:
+    title: "carrier"
+    description: "A package manager for {box} modules, built in Rust."
+    site-url: https://joshuamarie.github.io/carrier
+    repo-url: https://github.com/joshuamarie/carrier
+    repo-actions: [issue]
+    page-navigation: true
+    navbar:
+        left:
+            - href: index.qmd
+              text: Home
+            - href: installation.qmd
+              text: Installation
+            - href: getting-started.qmd
+              text: Get Started
+            - text: Reference
+              menu:
+                  - href: reference/cli.qmd
+                    text: CLI Commands
+                  - href: reference/carrier-toml.qmd
+                    text: carrier.toml
+                  - href: reference/module-structure.qmd
+                    text: Module Structure
+            # - text: Internals
+            #   menu:
+            #       - href: internals/architecture.qmd
+            #         text: Architecture
+            #       - href: internals/dependency-resolution.qmd
+            #         text: Dependency Resolution
+            #       # - href: internals/known-gaps.qmd
+            #       #   text: Known Gaps
+            # - href: contributing.qmd
+            #   text: Contributing
+        right:
+            - icon: github
+              href: https://github.com/joshuamarie/carrier
+    sidebar:
+        - title: Reference
+          contents:
+              - reference/cli.qmd
+              - reference/carrier-toml.qmd
+              - reference/module-structure.qmd
+        # - title: Internals
+        #   contents:
+        #       - internals/architecture.qmd
+        #       - internals/dependency-resolution.qmd
+
+format:
+    html:
+        theme: cosmo
+        css: styles.css
+        toc: true
+        code-copy: true
+        code-block-bg: true
+        highlight-style: github

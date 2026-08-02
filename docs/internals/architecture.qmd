@@ -1,0 +1,57 @@
+---
+title: "Architecture"
+---
+
+## Workspace layout
+
+```
+crates/
+├── carrier/          # bin crate — clap CLI, thin command wrappers
+│   └── src/
+│       ├── main.rs
+│       └── commands/  # one file per subcommand, delegates to carrier-core::ops
+└── carrier-core/      # lib crate — all real logic, reusable outside the CLI
+    └── src/
+        ├── carrier_toml.rs   # carrier.toml schema + parsing
+        ├── manifest.rs       # manifest.json embedded in bundled archives
+        ├── version.rs        # semver-based VersionSpec
+        ├── paths.rs          # install-dir / R-lib-dir resolution
+        ├── formats/          # tar.gz and .rmbx archive read/write
+        ├── cran/              # CRAN package fetch, resolve, install
+        │   ├── packages.rs    # PACKAGES.gz fetch + parse
+        │   ├── client.rs      # dependency resolution + install orchestration
+        │   └── binary_install.rs  # binary-archive extraction
+        └── ops/                # one module per CLI command's actual logic
+            ├── init.rs, bundle.rs, install.rs, remove.rs, resolve.rs
+```
+
+`crates/carrier` owns argument parsing and process exit codes; `crates/carrier-core` owns everything that could plausibly be reused by something other than the CLI — the `network` feature flag lives on this crate.
+
+## What goes into `manifest.json`
+
+Every bundled archive (`.tar.gz` or `.rmbx`) embeds a `manifest.json` built from `carrier.toml` by `ops::bundle::build_manifest`:
+
+- `name`, `version`, `description`, `authors`, `license`, `r_version` — copied straight from `[module]`.
+- `dependencies.packages` — flattened from `[package_deps]`; a dependency's `repo` is omitted entirely when it's the default CRAN mirror, and included otherwise.
+- `dependencies.modules` — flattened from `[module_deps]`.
+- `files` — every file under the resolved source directory.
+- `bundled_at` — an RFC 3339 timestamp captured at bundle time.
+
+`carrier install` reads this manifest back out of `.rmbx`/`.tar.gz` archives instead of re-parsing `carrier.toml`, so the archive is self-describing.
+
+## Path resolution
+
+Two directories matter at runtime, and both follow an environment-variable-first, sensible-default-second pattern:
+
+**Module install directory** (`paths::resolve_install_dir`)
+
+1. `CARRIER_LIB`, if set and non-empty.
+2. `~/.carrier/modules`.
+
+**R user library directory** (`paths::resolve_r_lib_dir`)
+
+1. `CARRIER_R_LIB`, if set and non-empty — the explicit override, meant for renv/rv-style project-local libraries.
+2. `R_LIBS_USER`, if set and non-empty — R's own variable.
+3. A subprocess fallback: `Rscript -e "cat(.libPaths()[1])"`.
+
+The third step is a real subprocess call — anything invoking `carrier install --install-deps` without `R`/`Rscript` on `PATH`, and without either environment variable set, fails there with a message pointing at `CARRIER_R_LIB`.

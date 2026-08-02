@@ -1,0 +1,33 @@
+---
+title: "Module Structure"
+---
+
+## Layout
+
+```
+<project-root>/
+├── carrier.toml
+├── README.md
+└── <src-dir>/
+    ├── __init__.R
+    ├── mod.R
+    ├── mod2.R
+    └── <submod>/
+        ├── __init__.R
+        └── example.R
+```
+
+Anyone who knows the shape of a Python package will recognize this: `<project-root>` plays the role of the package's top-level directory, `carrier.toml` plays `pyproject.toml`, and `__init__.R` plays `__init__.py`.
+
+## How the source directory is resolved
+
+`carrier bundle` and `carrier install <dir>` both resolve the source directory the same way, in this order:
+
+1. When `src` is set in `carrier.toml`, that path is used, resolved relative to the project root. It can be just an R script. Otherwise, it must exist as a directory and must contain `__init__.R`. Any directory name is allowed here.
+2. By default, when `src` is unset, the source directory must be named *exactly* after `module.name`. There is no fallback search; a mismatch fails the build with an explicit error naming both the expected directory and the module name.
+
+Either way, a missing `__init__.R` at the resolved directory's root fails immediately, with a message pointing at `__init__.R`'s role as the module's entry point.
+
+## `__init__.R`
+
+This is the only file `carrier` treats specially. Everything else under the source directory is bundled as-is. The `carrier bundle` command walks the whole tree and includes every file it finds, so keep build artifacts and scratch files out of the source directory (or point `src` at a directory that doesn't contain them).

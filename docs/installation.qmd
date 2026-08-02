@@ -1,0 +1,58 @@
+---
+title: "Installation"
+---
+
+`carrier` ships as a single native binary. There is no R package to install for the CLI itself, only for the `{box}` fork it depends on at runtime (see [below](#the-box-fork)).
+
+## Pre-built binaries
+
+Pre-built binaries for Linux, macOS, and Windows are published on the [Releases](https://github.com/joshuamarie/carrier/releases) page.
+
+Linux / macOS:
+
+``` bash
+curl -sSL https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.sh | bash
+```
+
+Windows:
+
+``` bash
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.ps1 | iex"
+```
+
+To pin a specific version, use that version's asset URL instead of the `latest` one the scripts above resolve to:
+
+``` bash
+curl -LsSf https://github.com/joshuamarie/carrier/releases/download/v0.1.0/carrier-installer.sh | bash
+```
+
+``` bash
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/joshuamarie/carrier/releases/download/v0.1.0/carrier-installer.ps1 | iex"
+```
+
+## Building from source
+
+Requires the stable Rust toolchain (`rustc`, `cargo`):
+
+``` bash
+cargo install --git https://github.com/joshuamarie/carrier
+```
+
+`carrier`'s GitHub-install path (`carrier install gh:user/repo`) is compiled behind the `network` feature on `carrier-core`. If you're building from source and plan to install modules directly from GitHub, confirm that feature is enabled for the binary you build — otherwise `carrier install gh:...` will fail with an explicit "requires the 'network' feature" error rather than silently doing nothing.
+
+## The `{box}` fork
+
+`carrier`-installed modules are resolved through `{box}`, but the syntax and path-resolution patches that make `box::use()` aware of `carrier`'s install location aren't in upstream `{box}` yet. Until they land, install the patched fork:
+
+``` r
+# install.packages('pak')
+pak::pak("joshuamarie/box@carrier-module-support")
+```
+
+## Verifying the install
+
+``` bash
+carrier --version
+```
+
+Next: [Get Started](getting-started.qmd) walks through initializing, bundling, and installing a module end to end.

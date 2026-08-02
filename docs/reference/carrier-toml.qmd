@@ -1,0 +1,101 @@
+---
+title: "carrier.toml"
+---
+
+`carrier.toml` sits at the root of a module project, one level above the source directory. It has up to four tables: `[module]` (required), `[package_deps]`, `[module_deps]`, and `[test]`.
+
+## `[module]`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `name` | string | yes | Also the default source directory name. |
+| `version` | string | yes | Free-form; `carrier bundle` uses it verbatim in the output filename. |
+| `description` | string | yes | May be empty. |
+| `authors` | array | yes | See [Authors](#authors) below. |
+| `license` | string | yes | |
+| `r_version` | string | yes | Declarative minimum R version. See the note in [Known Gaps](../internals/known-gaps.qmd) — nothing currently checks this against the running R installation. |
+| `src` | string | no | Path to the source directory, relative to the project root. Defaults to a directory named exactly `name`. Whatever directory is used, it must contain `__init__.R`. |
+
+### Authors
+
+Each entry in `authors` is either a plain string or an inline table:
+
+``` toml
+authors = [
+    "Jane Doe",
+    { name = "Joshua Marie", email = "joshua.marie.k@gmail.com" },
+]
+```
+
+The inline table form accepts `name` (required), and optional `email`, `url`, `orcid`.
+
+## `[package_deps]`
+
+Maps an R package name to a version requirement — either a bare string (CRAN, default mirror) or an inline table with an explicit `repo`:
+
+``` toml
+[package_deps]
+dplyr = "*"
+ggplot2 = ">=3.4.0"
+fable = { version = "*", repo = "https://tidyverts.r-universe.dev/" }
+```
+
+### Version spec syntax
+
+| Syntax | Meaning |
+|---|---|
+| `"*"` | Any version |
+| `">=1.0.0"` | Lower bound only |
+| `">=1.0.0, <2.0.0"` | Range (comma-separated bounds) |
+| `"^1.2.0"` | semver-compatible with 1.2.0 |
+| `"=1.2.3"` | Exact pin |
+
+R version strings that use dashes (e.g. `4.0-3`, as CRAN's `PACKAGES` index does) are normalized to dots internally before being parsed as semver.
+
+## `[module_deps]`
+
+Maps a `carrier`-installed module name to a version requirement string, using the same syntax as `[package_deps]`:
+
+``` toml
+[module_deps]
+other_module = "*"
+```
+
+Transitive resolution for module dependencies is not yet implemented — see [Known Gaps](../internals/known-gaps.qmd).
+
+## `[test]`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `framework` | string | yes | e.g. `"testthat"` |
+| `dir` | string | no | Test directory, e.g. `"tests"` |
+
+## Full template
+
+This is what `carrier init` writes:
+
+``` toml
+[module]
+name = "convert"
+version = "0.1.0"
+description = ""
+authors = [
+    { name = "Your Name", email = "you@example.com" },
+]
+license = "Unknown"
+r_version = "4.0.0"
+# src = "convert"    # path to the source directory containing __init__.R
+                      # defaults to a directory named after the module
+
+[package_deps]
+# dplyr = "*"
+# ggplot2 = ">=3.4.0"
+# fable = { version = "*", repo = "https://tidyverts.r-universe.dev/" }
+
+[module_deps]
+# other_module = "*"
+
+[test]
+framework = "testthat"
+dir = "tests"
+```

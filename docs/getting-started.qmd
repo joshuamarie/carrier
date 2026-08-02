@@ -1,0 +1,103 @@
+---
+title: "Get Started"
+---
+
+This walkthrough builds, bundles, and installs a small module from nothing, then uses it from R. It assumes `carrier` is on your `PATH` (see [Installation](installation.qmd) if it isn't).
+
+## 1. Scaffold a module
+
+``` bash
+carrier init rmod
+```
+
+This creates `rmod-proj/` (the default directory name is `<name>-proj`; override it with `--dir-name`):
+
+```
+rmod-proj/
+├── carrier.toml
+├── README.md
+└── rmod/
+    └── __init__.R
+```
+
+`carrier.toml` starts out mostly empty. Fill in `description`, `authors`, `license`, and any `[package_deps]` or `[module_deps]` your module needs. See the [carrier.toml reference](reference/carrier-toml.qmd) for the full schema.
+
+The source directory (`rmod/`) is named after the module by default. If you'd rather use a different directory name, set `src` in `carrier.toml` (see [Module Structure](reference/module-structure.qmd)).
+
+## 2. Write the module
+
+Everything under `rmod/` is plain `{box}` code. `__init__.R` is the entry point, the module-level equivalent of `NAMESPACE`. Here's an example: 
+
+``` r
+#' @export
+box::use(
+    ./module1,
+    ./module2,
+)
+```
+
+## 3. Bundle it
+
+From the project root:
+
+``` bash
+carrier bundle .
+```
+
+```
+Bundled 'convert' (0.1.0) -> /path/to/rmod_0.1.0.tar.gz
+```
+
+Pass `--rmbx` to produce a `.rmbx` archive instead of `.tar.gz`. Either way, the archive embeds a `manifest.json` built from `carrier.toml` (see [Architecture](internals/architecture.qmd) for what goes into it).
+
+## 4. Install it
+
+From a local archive:
+
+``` bash
+carrier install rmod_0.1.0.tar.gz
+```
+
+Directly from a module directory (carrier bundles it to a temp file first, then installs that):
+
+``` bash
+carrier install .
+```
+
+Or from a GitHub repo, optionally pointing at a subpath:
+
+``` bash
+carrier install gh:username/path/to/rmod-proj
+```
+
+Installing prints where the module landed and the dependency plan carrier worked out from `[package_deps]` / `[module_deps]`:
+
+```
+Installed 'rmod' (0.1.0) -> ~/.carrier/modules/rmod
+Dependencies:
+  R packages:
+    dplyr (*)
+  Would install R packages (pass --install-deps to proceed):
+    dplyr (*)
+```
+
+By default, R package dependencies are only *planned*, not installed. To install the main package dependencies, pass `--install-deps` to actually fetch and install them from CRAN (the default repo):
+
+``` bash
+carrier install rmod_0.1.0.tar.gz --install-deps
+```
+
+## 5. Use it from R
+
+``` r
+box::use(rmod)
+rmod$module1$fn(...)
+```
+
+## 6. Remove it
+
+``` bash
+carrier remove rmod
+```
+
+You'll be asked to confirm; skip the prompt with `--force`.

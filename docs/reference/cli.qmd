@@ -1,0 +1,59 @@
+---
+title: "CLI Commands"
+---
+
+`carrier` exposes four subcommands. All of them exit non-zero and print `error: ...` to stderr on failure.
+
+## `carrier init`
+
+``` bash
+carrier init <name> [--dir-name <dir>]
+```
+
+| Argument | Description |
+|---|---|
+| `<name>` | Module name. Used as the default project directory (`<name>-proj`), the default source directory name, and the `name` field in `carrier.toml`. |
+| `--dir-name <dir>` | Override the project directory name. |
+
+Fails if the target directory already exists. Creates `carrier.toml`, `README.md`, and `<name>/__init__.R`.
+
+## `carrier bundle`
+
+``` bash
+carrier bundle <path> [--rmbx]
+```
+
+| Argument | Description |
+|---|---|
+| `<path>` | Project root — the directory containing `carrier.toml`. Usually `.`. |
+| `--rmbx` | Produce a `.rmbx` archive instead of the default `.tar.gz`. |
+
+Reads `carrier.toml`, resolves the source directory (see [Module Structure](module-structure.qmd)), and writes `<name>_<version>.<ext>` to the current working directory. Fails if the source directory has no files, or if `carrier.toml` is missing or malformed.
+
+## `carrier install`
+
+``` bash
+carrier install <source> [--install-deps]
+```
+
+| Argument | Description |
+|---|---|
+| `<source>` | One of: a directory containing `carrier.toml`, a `.tar.gz` archive, a `.rmbx` archive, or `gh:user/repo` (optionally `gh:user/repo/tree/branch/subpath`). |
+| `--install-deps` | Actually install resolved R package dependencies from CRAN, rather than only printing the plan. |
+
+Any existing install of the same module name is replaced. The `[package_deps]` / `[module_deps]` in `carrier.toml` are resolved and printed regardless of `--install-deps`; without the flag, R packages are planned but not fetched.
+
+`gh:` sources require the `network` feature on `carrier-core` — see [Installation](../installation.qmd).
+
+## `carrier remove`
+
+``` bash
+carrier remove <name> [--force]
+```
+
+| Argument | Description |
+|---|---|
+| `<name>` | Name of an installed module. |
+| `--force` | Skip the `[y/N]` confirmation prompt. |
+
+Fails if no module with that name is installed.

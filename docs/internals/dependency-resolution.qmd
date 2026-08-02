@@ -1,0 +1,41 @@
+---
+title: "Dependency Resolution"
+---
+
+This page covers `cran::client::install_packages`. It specifically covers what actually runs when `carrier install --install-deps` resolves and installs R package dependencies.
+
+## Grouping and fetch
+
+Requested packages are grouped by repo first, so each repo's `PACKAGES.gz` index is fetched exactly once per `carrier install` run, no matter how many packages come from it. The fetch itself retries: three attempts, exponential backoff (`2^attempt` seconds) between them, on both non-2xx responses and request failures.
+
+## Graph walk
+
+For each repo group, `resolve_install_set` walks the dependency graph breadth-first starting from the requested packages:
+
+1. Every requested package's version spec is queued.
+2. For each package popped off the queue, its record is looked up in the fetched index. **A package missing from the index is a warning, not a failure** — it's skipped, and anything that only that package would have pulled in is skipped with it. See [Known Gaps](known-gaps.qmd).
+3. Its `Imports`/`Depends` fields are parsed into further (package, spec) pairs, base and recommended R packages filtered out, and pushed onto the same queue.
+
+## Cross-repo consistency
+
+A package already resolved by an earlier repo group in the same run is not re-resolved. Instead, its already-chosen version is checked against the current repo's constraints for that package; if it satisfies them, it's reused as-is, and if it doesn't, the whole install fails loudly with both repos named. This is what stops a package pulled in transitively from two different repos from silently ending up at two different versions depending on processing order.
+
+## Version selection
+
+For each package, the index's listed version is tried against all collected specs first. If nothing satisfies them, `fetch_archive_versions` scrapes CRAN's `Archive/<pkg>/` HTML directory listing (a plain substring scan for `href="..."`, not a full HTML parser) for older versions and retries resolution against that list.
+
+## Install order and installation
+
+Resolved packages are installed in dependency order (a straightforward DFS-based topological sort over the resolved set). For each one, an existing install with a matching version already in the target library is left alone; anything else is (re)installed.
+
+Installation itself prefers a binary archive over building from source:
+
+1. **Binary first**, when the platform is Windows or macOS (`bin/windows/contrib/<r-version>/<pkg>_<version>.zip` or `bin/macosx/contrib/<r-version>/<pkg>_<version>.tgz`). Linux has no generic CRAN binaries, so this step is skipped there entirely.
+2. A downloaded binary archive is only trusted if it contains `Meta/package.rds` — a real built package always has it, a source tree never does. This rejects a source tarball served where a binary was expected (or a truncated download) before it's ever unpacked into the library.
+3. **Source fallback**: `<repo>/src/contrib/<pkg>_<version>.tar.gz`, then `Archive/<pkg>/<pkg>_<version>.tar.gz` on 404, then `<pkg>_<version>.9000.tar.gz` (a CRAN dev-version convention) on 404 again — each downloaded tarball is handed to `R CMD INSTALL --no-multiarch --no-docs --no-help`.
+
+A failed install of a **directly requested** package aborts the whole run. A failed install of a package that only showed up as a transitive dependency is logged as a warning and the run continues.
+
+## Archive extraction safety
+
+Both the `.zip` and `.tar.gz` binary-extraction paths sanitize every entry path before writing anything to disk: absolute paths and any `..` component are rejected outright, and on Unix, symlink targets are dropped if they're absolute or contain a parent-directory component. Extraction always lands in a temp staging directory first; only after `Meta/package.rds` is confirmed does the staged package get moved into the real library — via a rename, falling back to a recursive copy if staging and the library live on different filesystems.
