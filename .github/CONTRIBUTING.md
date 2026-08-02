@@ -1,0 +1,42 @@
+# Contributing to carrier
+
+## Building
+
+You need to know that `carrier` pins its toolchain via `rust-toolchain.toml`, so a plain `cargo build` uses the right stable toolchain automatically.
+
+``` bash
+cargo build --workspace
+cargo test --workspace
+```
+
+Enable the GitHub-install path while working on it:
+
+``` bash
+cargo build --workspace --features carrier-core/network
+```
+
+## Ways to contribute
+
+This section also explains the structure where the things live. 
+
+- Add a new CLI surface under `crates/carrier/src/commands/`. Keep it a thin wrapper that parses arguments and calls into `carrier-core`.
+- Put the actual logic in `crates/carrier-core/src/ops/`, which also mirrors the command name.
+- Anything that touches CRAN goes in `crates/carrier-core/src/cran/`.
+- Archive read/write (`.tar.gz`, `.rmbx`) goes in `crates/carrier-core/src/formats/`.
+
+This split exists so `carrier-core` stays usable outside the CLI. Don't reach into `clap` types from inside `ops/`.
+
+## Docs
+
+This site is built on Quarto website rooted at `docs/`. Preview it locally with:
+
+``` bash
+quarto preview docs
+```
+
+It's rebuilt and deployed by `.github/workflows/docs.yml` on every push to `main` that touches `docs/**`.
+
+## Changelog
+
+User-facing changes go in `CHANGELOG.md` at the repo root.
+
