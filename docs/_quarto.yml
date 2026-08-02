@@ -25,16 +25,16 @@ website:
                     text: carrier.toml
                   - href: reference/module-structure.qmd
                     text: Module Structure
-            # - text: Internals
-            #   menu:
-            #       - href: internals/architecture.qmd
-            #         text: Architecture
-            #       - href: internals/dependency-resolution.qmd
-            #         text: Dependency Resolution
+            - text: Internals
+              menu:
+                  - href: internals/architecture.qmd
+                    text: Architecture
+                  - href: internals/dependency-resolution.qmd
+                    text: Dependency Resolution
             #       # - href: internals/known-gaps.qmd
             #       #   text: Known Gaps
-            # - href: contributing.qmd
-            #   text: Contributing
+            - href: contribute.qmd
+              text: Contributing
         right:
             - icon: github
               href: https://github.com/joshuamarie/carrier
@@ -44,10 +44,10 @@ website:
               - reference/cli.qmd
               - reference/carrier-toml.qmd
               - reference/module-structure.qmd
-        # - title: Internals
-        #   contents:
-        #       - internals/architecture.qmd
-        #       - internals/dependency-resolution.qmd
+        - title: Internals
+          contents:
+              - internals/architecture.qmd
+              - internals/dependency-resolution.qmd
 
 format:
     html:
