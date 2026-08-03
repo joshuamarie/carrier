@@ -352,12 +352,33 @@ fn binary_url_for(pkg: &str, version: &str, repo_url: &str, platform: &crate::pa
             "{}/bin/windows/contrib/{}/{}_{}.zip",
             base, platform.r_version_short, pkg, version
         )),
-        RPlatformOs::MacOs => Some(format!(
-            "{}/bin/macosx/contrib/{}/{}_{}.tgz",
-            base, platform.r_version_short, pkg, version
-        )),
+        RPlatformOs::MacOs => {
+            // CRAN split macOS binaries by CPU architecture years ago —
+            // bin/macosx/contrib (no arch) is a legacy path that some
+            // mirrors still serve, populated with x86_64-only builds. Using
+            // it unconditionally installs an Intel binary on an Apple
+            // Silicon machine, which fails at dlopen() time, not at
+            // install time. R.version$arch is "aarch64" on Apple Silicon
+            // and "x86_64" on Intel; CRAN's own directory names are
+            // "arm64" and "x86_64" respectively.
+            let macos_arch = match platform.arch.as_str() {
+                "aarch64" | "arm64" => "big-sur-arm64",
+                "x86_64" => "big-sur-x86_64",
+                other => {
+                    eprintln!(
+                        "  [warn] unrecognized macOS architecture '{}', skipping binary install for {}",
+                        other, pkg
+                    );
+                    return None;
+                }
+            };
+            Some(format!(
+                "{}/bin/macosx/{}/contrib/{}/{}_{}.tgz",
+                base, macos_arch, platform.r_version_short, pkg, version
+            ))
+        }
         // On Linux, CRAN has no generic binaries, always source
-        RPlatformOs::Other => None, 
+        RPlatformOs::Other => None,
     }
 }
 

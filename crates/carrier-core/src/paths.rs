@@ -22,6 +22,7 @@ pub fn resolve_install_dir() -> Result<PathBuf> {
 pub struct RPlatform {
     pub os: RPlatformOs,
     pub r_version_short: String,
+    pub arch: String,
 }
 
 pub enum RPlatformOs {
@@ -39,21 +40,37 @@ pub fn detect_r_platform() -> Result<RPlatform> {
         RPlatformOs::Other
     };
 
+    // Ask R for both its version and its actual running architecture in one
+    // call — R.version$arch reflects what the R process itself was built
+    // for, which is what determines which binary it can load. Reading this
+    // from R directly, rather than from the arch carrier itself was
+    // compiled for, stays correct even if carrier and R ever end up running
+    // under different architectures (e.g. one under Rosetta).
     let output = std::process::Command::new("Rscript")
-        .args(["-e", "cat(paste(R.version$major, strsplit(R.version$minor, '.', fixed=TRUE)[[1]][1], sep='.'))"])
+        .args([
+            "-e",
+            "cat(paste(R.version$major, strsplit(R.version$minor, '.', fixed=TRUE)[[1]][1], sep='.'), R.version$arch)",
+        ])
         .output()
         .context("Failed to run Rscript to detect R version — is R installed and on PATH?")?;
 
-    let r_version_short = String::from_utf8(output.stdout)
-        .context("Rscript output was not valid UTF-8")?
-        .trim()
+    let stdout = String::from_utf8(output.stdout)
+        .context("Rscript output was not valid UTF-8")?;
+    let mut fields = stdout.trim().split_whitespace();
+
+    let r_version_short = fields
+        .next()
+        .filter(|s| !s.is_empty())
+        .context("Could not determine R version from Rscript output")?
         .to_owned();
 
-    if r_version_short.is_empty() {
-        anyhow::bail!("Could not determine R version from Rscript output");
-    }
+    let arch = fields
+        .next()
+        .filter(|s| !s.is_empty())
+        .context("Could not determine R architecture from Rscript output")?
+        .to_owned();
 
-    Ok(RPlatform { os, r_version_short })
+    Ok(RPlatform { os, r_version_short, arch })
 }
 
 /// Resolves the R user library path where R packages should be installed.
