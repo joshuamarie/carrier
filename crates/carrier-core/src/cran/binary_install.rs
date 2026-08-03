@@ -59,10 +59,8 @@ pub fn install_binary_package(
             .with_context(|| format!("Failed to remove existing install at {}", dest.display()))?;
     }
 
-    std::fs::rename(&staged_pkg, &dest).or_else(|_| {
-        // Staging dir and lib_path may be on different filesystems (temp dir
-        // vs a user-configured lib path), which makes rename() fail with
-        // EXDEV. Fall back to copy + remove in that case.
+    std::fs::rename(&staged_pkg, &dest).or_else(|rename_err| {
+        eprintln!("[carrier] rename failed for {package_name} ({rename_err}), falling back to copy");
         copy_dir_recursive(&staged_pkg, &dest)?;
         std::fs::remove_dir_all(&staged_pkg).ok();
         Ok::<(), anyhow::Error>(())
