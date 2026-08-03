@@ -258,7 +258,7 @@ fn download_and_unpack(
     
     if let Ok(platform) = &platform {
         if let Some(binary_url) = binary_url_for(pkg, version, repo_url, platform) {
-            match try_install_binary(pkg, &binary_url, lib_path) {
+            match try_install_binary(pkg, &binary_url, lib_path, &platform.arch) {
                 Ok(()) => {
                     println!("  [binary] {} {} (no compilation needed)", pkg, version);
                     return Ok(());
@@ -382,7 +382,7 @@ fn binary_url_for(pkg: &str, version: &str, repo_url: &str, platform: &crate::pa
     }
 }
 
-fn try_install_binary(pkg: &str, url: &str, lib_path: &Path) -> Result<()> {
+fn try_install_binary(pkg: &str, url: &str, lib_path: &Path, expected_arch: &str) -> Result<()> {
     let response = reqwest::blocking::get(url)
         .with_context(|| format!("Failed to download binary: {}", url))?;
 
@@ -410,5 +410,5 @@ fn try_install_binary(pkg: &str, url: &str, lib_path: &Path) -> Result<()> {
     tmp.write_all(&bytes)
         .with_context(|| format!("Failed to write temp archive for {}", pkg))?;
 
-    binary_install::install_binary_package(tmp.path(), lib_path, pkg)
+    binary_install::install_binary_package(tmp.path(), lib_path, pkg, expected_arch)
 }

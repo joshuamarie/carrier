@@ -21,12 +21,14 @@ use tempfile::TempDir;
 /// into `lib_path`, replacing any existing install of that package.
 ///
 /// Extraction lands in a temp staging directory first. Only after the
-/// staged tree passes `verify_built_package` is it moved into place —
-/// so a bad or truncated download never overwrites a working install.
+/// staged tree passes `verify_built_package` and `verify_binary_arch` is it
+/// moved into place — so a bad download, or one for the wrong CPU
+/// architecture, never overwrites a working install.
 pub fn install_binary_package(
     archive_path: &Path,
     lib_path: &Path,
     package_name: &str,
+    expected_arch: &str,
 ) -> Result<()> {
     let staging = TempDir::new().context("Failed to create staging dir for binary install")?;
 
@@ -46,6 +48,7 @@ pub fn install_binary_package(
 
     let staged_pkg = staging.path().join(package_name);
     verify_built_package(&staged_pkg, package_name)?;
+    verify_binary_arch(&staged_pkg, package_name, expected_arch)?;
 
     std::fs::create_dir_all(lib_path)
         .with_context(|| format!("Failed to create lib dir: {}", lib_path.display()))?;
@@ -83,6 +86,93 @@ fn verify_built_package(staged_pkg: &Path, package_name: &str) -> Result<()> {
          Retry the download, or install from source instead.",
         package_name
     );
+}
+
+/// Reads the CPU-architecture field directly out of a compiled library's
+/// own header, rather than trusting that the URL it was downloaded from
+/// actually matched what it claims. Some mirrors (observed: Posit Package
+/// Manager) return HTTP 200 for an architecture-tagged binary path even
+/// when the served file doesn't match that architecture, instead of the
+/// clean 404 a plain CRAN mirror gives for the same kind of miss — a
+/// URL-only check misses exactly that case.
+///
+/// Returns `Ok(None)` when the format isn't recognized (e.g. a fat/
+/// universal Mach-O, or anything else this doesn't parse) — an
+/// unrecognized format isn't evidence of a mismatch, only something this
+/// check doesn't cover.
+fn binary_file_arch(path: &Path) -> Result<Option<&'static str>> {
+    let bytes = std::fs::read(path)
+        .with_context(|| format!("Failed to read {}", path.display()))?;
+
+    if bytes.len() >= 8 {
+        let magic = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        if magic == 0xfeedfacf {
+            // Thin 64-bit Mach-O (.dylib/.so on macOS). cputype follows
+            // the magic number.
+            let cputype = i32::from_le_bytes(bytes[4..8].try_into().unwrap());
+            return Ok(match cputype {
+                0x0100_0007 => Some("x86_64"),
+                0x0100_000c => Some("arm64"),
+                _ => None,
+            });
+        }
+    }
+
+    if bytes.len() >= 64 && &bytes[0..2] == b"MZ" {
+        // PE (.dll on Windows): the DOS header points at the real PE
+        // header offset; the machine field follows the "PE\0\0" signature.
+        let pe_offset = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+        if bytes.len() >= pe_offset + 6 && &bytes[pe_offset..pe_offset + 4] == b"PE\0\0" {
+            let machine = u16::from_le_bytes(
+                bytes[pe_offset + 4..pe_offset + 6].try_into().unwrap(),
+            );
+            return Ok(match machine {
+                0x8664 => Some("x86_64"),
+                0xaa64 => Some("arm64"),
+                _ => None,
+            });
+        }
+    }
+
+    Ok(None)
+}
+
+/// Walks every compiled library under `staged_pkg/libs/` and confirms each
+/// one's actual architecture matches `expected_arch`. Packages with no
+/// `libs/` directory (pure-R packages, no compiled code) pass trivially.
+fn verify_binary_arch(staged_pkg: &Path, package_name: &str, expected_arch: &str) -> Result<()> {
+    let expected = match expected_arch {
+        "aarch64" => "arm64",
+        other => other,
+    };
+
+    let libs_dir = staged_pkg.join("libs");
+    if !libs_dir.is_dir() {
+        return Ok(());
+    }
+
+    for entry in walkdir::WalkDir::new(&libs_dir).into_iter().filter_map(|e| e.ok()) {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let ext = entry.path().extension().and_then(|e| e.to_str());
+        if !matches!(ext, Some("so") | Some("dll") | Some("dylib")) {
+            continue;
+        }
+
+        if let Some(found) = binary_file_arch(entry.path())? {
+            if found != expected {
+                bail!(
+                    "'{}' contains a compiled library built for '{}', but this machine needs \
+                     '{}' ({}). The mirror served a mismatched binary for an \
+                     architecture-tagged URL instead of a 404.",
+                    package_name, found, expected, entry.path().display()
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Reject any archive entry path that is absolute or contains a `..`
