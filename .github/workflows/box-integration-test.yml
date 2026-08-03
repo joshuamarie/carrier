@@ -49,6 +49,14 @@ jobs:
                       ./target/release/carrier install ./fpurrr-src --install-deps
                   fi
 
+            - name: "Diagnose lib paths (windows)"
+              if: runner.os == 'Windows'
+              shell: bash
+              run: |
+                  Rscript -e 'cat(.libPaths(), sep="\n")'
+                  echo "TEMP=$TEMP"
+                  echo "RUNNER_TEMP=$RUNNER_TEMP"
+            
             - name: "Verify box::use() resolves the installed module"
               shell: bash
               run: |
