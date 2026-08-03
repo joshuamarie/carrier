@@ -74,7 +74,12 @@ fn help_flag_lists_all_subcommands() {
 fn no_subcommand_exits_nonzero_with_usage() {
     let assert = carrier_cmd().assert().failure();
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    assert!(stderr.contains("Usage: carrier"), "stderr was:\n{stderr}");
+    // Deliberately not asserting on the exact "Usage: carrier" text — the
+    // binary name in that line varies by platform (carrier vs
+    // carrier.exe) and build config, so pin to structural content that's
+    // stable either way.
+    assert!(stderr.contains("Commands:"), "stderr was:\n{stderr}");
+    assert!(stderr.contains("install"), "stderr was:\n{stderr}");
 }
 
 // ---- init ----
@@ -253,4 +258,154 @@ fn remove_without_force_respects_declined_confirmation() {
     assert!(stdout.contains("Aborted."), "stdout was:\n{stdout}");
 
     assert!(module_dir.exists(), "module should still be installed after declining removal");
+}
+
+// ---- bare-name reservation (module registry conflict) ----
+//
+// A bare argument with no path separator and no leading `.` must never
+// match a same-named local directory, even when one exists in the CWD.
+// That name is reserved for a future module registry lookup, mirroring
+// pip's `_looks_like_path` behavior (judged by appearance only, never by
+// checking the filesystem). Local installs require an explicit signal:
+// `./name`, `../name`, an absolute path, or a recognized archive
+// extension.
+
+#[test]
+fn install_bare_name_matching_local_dir_is_reserved_not_silently_installed() {
+    let cwd = Scratch::new("bare-name-cwd");
+    let project = cwd.path().join("convert-proj");
+
+    carrier_cmd()
+        .args(["init", "convert", "--dir-name", project.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // Bare name, no ./ prefix, even though convert-proj/ genuinely exists
+    // right here in cwd — must NOT silently install it.
+    let assert = carrier_cmd()
+        .current_dir(cwd.path())
+        .args(["install", "convert-proj"])
+        .assert()
+        .failure()
+        .code(1);
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("looks like a module name"), "stderr was:\n{stderr}");
+    assert!(stderr.contains("registry"), "stderr was:\n{stderr}");
+}
+
+#[test]
+fn install_explicit_relative_path_still_installs_local_dir() {
+    let cwd = Scratch::new("explicit-relative-cwd");
+    let project = cwd.path().join("convert-proj");
+    let lib = Scratch::reserved("explicit-relative-lib");
+
+    carrier_cmd()
+        .args(["init", "convert", "--dir-name", project.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // Same directory as above, but with an explicit ./ signal this time.
+    carrier_cmd()
+        .current_dir(cwd.path())
+        .env("CARRIER_LIB", lib.path())
+        .args(["install", "./convert-proj"])
+        .assert()
+        .success();
+
+    assert!(lib.path().join("convert").join("__init__.R").is_file());
+}
+
+#[test]
+fn install_bare_archive_filename_still_works_without_dot_slash() {
+    let cwd = Scratch::new("bare-archive-cwd");
+    let project = cwd.path().join("mymod-proj");
+    let lib = Scratch::reserved("bare-archive-lib");
+
+    carrier_cmd()
+        .args(["init", "mymod", "--dir-name", project.to_str().unwrap()])
+        .assert()
+        .success();
+
+    carrier_cmd()
+        .current_dir(cwd.path())
+        .args(["bundle", project.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // A bare .tar.gz filename (no separator, no leading dot) must still
+    // work without needing ./ — the archive-extension escape hatch.
+    carrier_cmd()
+        .current_dir(cwd.path())
+        .env("CARRIER_LIB", lib.path())
+        .args(["install", "mymod_0.1.0.tar.gz"])
+        .assert()
+        .success();
+
+    assert!(lib.path().join("mymod").join("__init__.R").is_file());
+}
+
+// ── --repo scaffolding (no registry backend yet) ─────────────────────
+//
+// The flag, arg threading, and mutual-exclusivity checks are real and
+// tested here even though there's no registry protocol to actually talk
+// to yet — install_from_registry's body is the one piece intentionally
+// left as a stub.
+
+#[test]
+fn install_bare_name_with_repo_hits_the_not_implemented_stub() {
+    let assert = carrier_cmd()
+        .args(["install", "somepkg", "--repo", "https://modules.example.com"])
+        .assert()
+        .failure()
+        .code(1);
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("registries aren't implemented yet"), "stderr was:\n{stderr}");
+    assert!(stderr.contains("somepkg"), "stderr was:\n{stderr}");
+    assert!(stderr.contains("https://modules.example.com"), "stderr was:\n{stderr}");
+}
+
+#[test]
+fn install_repo_flag_rejected_with_gh_source() {
+    let assert = carrier_cmd()
+        .args(["install", "gh:someuser/somerepo", "--repo", "https://modules.example.com"])
+        .assert()
+        .failure()
+        .code(1);
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("--repo doesn't apply to gh:"), "stderr was:\n{stderr}");
+}
+
+#[test]
+fn install_repo_flag_rejected_with_local_path_source() {
+    let cwd = Scratch::new("repo-flag-local-path-cwd");
+    let project = cwd.path().join("mymod-proj");
+
+    carrier_cmd()
+        .args(["init", "mymod", "--dir-name", project.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let assert = carrier_cmd()
+        .args(["install", "./mymod-proj", "--repo", "https://modules.example.com"])
+        .current_dir(cwd.path())
+        .assert()
+        .failure()
+        .code(1);
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("--repo doesn't apply to local paths"), "stderr was:\n{stderr}");
+}
+
+#[test]
+fn install_bare_name_without_repo_still_gets_the_original_reserved_error() {
+    // Unchanged behavior from before --repo existed: no --repo means the
+    // bare name is still just reserved, not resolvable to anything.
+    let assert = carrier_cmd().args(["install", "somepkg"]).assert().failure().code(1);
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("looks like a module name"), "stderr was:\n{stderr}");
+    assert!(stderr.contains("--repo"), "stderr was:\n{stderr}");
 }

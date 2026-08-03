@@ -42,12 +42,16 @@ enum Commands {
         rmbx: bool,
     },
 
-    /// Install a module from a .tar.gz, .rmbx, or GitHub (gh:user/repo)
+    /// Install a module from a .tar.gz, .rmbx, GitHub (gh:user/repo), or
+    /// a module registry (bare name + --repo; registries aren't
+    /// implemented yet)
     Install {
         /// The module source
         source: String,
         #[arg(long, help = "Automatically install R package dependencies from CRAN")]
         install_deps: bool,
+        #[arg(long, help = "Registry URL to install SOURCE from (registries aren't implemented yet)")]
+        repo: Option<String>,
     },
 
     /// Remove an installed module
@@ -71,8 +75,8 @@ fn main() {
         Commands::Bundle { path, rmbx } => {
             commands::bundle::run(BundleArgs { path, rmbx })
         }
-        Commands::Install { source, install_deps } => {
-            commands::install::run(InstallArgs { source, install_deps })
+        Commands::Install { source, install_deps, repo } => {
+            commands::install::run(InstallArgs { source, install_deps, repo })
         }
         Commands::Remove { name, force } => {
             commands::remove::exec(RemoveArgs { name, force })
