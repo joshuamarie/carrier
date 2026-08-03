@@ -8,8 +8,13 @@ on:
 
 jobs:
     box-integration:
-        runs-on: ubuntu-latest
+        runs-on: ${{ matrix.os }}
         timeout-minutes: 20
+
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
 
         steps:
             - uses: actions/checkout@v4
@@ -33,22 +38,32 @@ jobs:
                   Rscript -e 'pak::pak("joshuamarie/box@carrier-module-support")'
 
             - name: "Install a real module via carrier"
-              run: ./target/release/carrier install gh:joshuamarie/fpurrr --install-deps
+              shell: bash
+              run: |
+                  if [ "${{ runner.os }}" = "Windows" ]; then
+                      ./target/release/carrier.exe install gh:joshuamarie/fpurrr --install-deps
+                  else
+                      ./target/release/carrier install gh:joshuamarie/fpurrr --install-deps
+                  fi
 
             - name: "Verify box::use() resolves the installed module"
+              shell: bash
               run: |
                   Rscript -e '
-                  box::use(fp = fpurrr, fpurrr/map)
- 
+                  box::use(
+                      fp = fpurrr, 
+                      fpurrr/map, 
+                  )
+
                   cat("== fp$map$call(1:5, sqrt) ==\n")
                   print(fp$map$call(1:5, sqrt))
- 
+
                   cat("\n== map$call(1:5, sqrt) (submodule imported directly) ==\n")
                   print(map$call(1:5, sqrt))
- 
+
                   cat("\n== fp$map$call@dbl(1:5, sqrt) (typed dispatch) ==\n")
                   print(fp$map$call@dbl(1:5, sqrt))
- 
+
                   stopifnot(identical(fp$map$call@dbl(1:5, sqrt), sqrt(1:5)))
-                  cat("\nbox successfully imported the carrier-installed module.\n")
+                  cat("\n\nbox successfully imported the carrier-installed module.\n")
                   '
