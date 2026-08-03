@@ -37,31 +37,37 @@ jobs:
                   Rscript -e 'install.packages("pak")'
                   Rscript -e 'pak::pak("joshuamarie/box@carrier-module-support")'
 
+            - name: "Fetch fpurrr"
+              run: git clone --depth 1 https://github.com/joshuamarie/fpurrr.git fpurrr-src
+
             - name: "Install a real module via carrier"
               shell: bash
               run: |
                   if [ "${{ runner.os }}" = "Windows" ]; then
-                      ./target/release/carrier.exe install gh:joshuamarie/fpurrr --install-deps
+                      ./target/release/carrier.exe install ./fpurrr-src --install-deps
                   else
-                      ./target/release/carrier install gh:joshuamarie/fpurrr --install-deps
+                      ./target/release/carrier install ./fpurrr-src --install-deps
                   fi
 
             - name: "Verify box::use() resolves the installed module"
               shell: bash
               run: |
                   Rscript -e '
+                  cat("about to call box::use()\n"); flush(stdout())
                   box::use(
                       fp = fpurrr, 
                       fpurrr/map, 
                   )
+                  
+                  cat("box::use() returned\n"); flush(stdout())
 
-                  cat("== fp$map$call(1:5, sqrt) ==\n")
+                  cat("== fp$map$call(1:5, sqrt) ==\n"); flush(stdout())
                   print(fp$map$call(1:5, sqrt))
 
-                  cat("\n== map$call(1:5, sqrt) (submodule imported directly) ==\n")
+                  cat("\n== map$call(1:5, sqrt) (submodule imported directly) ==\n"); flush(stdout())
                   print(map$call(1:5, sqrt))
 
-                  cat("\n== fp$map$call@dbl(1:5, sqrt) (typed dispatch) ==\n")
+                  cat("\n== fp$map$call@dbl(1:5, sqrt) (typed dispatch) ==\n"); flush(stdout())
                   print(fp$map$call@dbl(1:5, sqrt))
 
                   stopifnot(identical(fp$map$call@dbl(1:5, sqrt), sqrt(1:5)))
