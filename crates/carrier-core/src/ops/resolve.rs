@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::carrier_toml::{PackageDep, DEFAULT_CRAN_MIRROR};
 use crate::version::VersionSpec;
@@ -47,19 +47,34 @@ pub fn resolve(
         // deps onto the queue for transitive resolution.
     }
 
-    let packages = pkg_specs
-        .into_iter()
-        .map(|(name, specs)| {
-            let version_spec = specs.first()
-                .map(|s| format!("{}", s))
-                .unwrap_or_else(|| "*".to_owned());
-            let repo = pkg_repos
-                .get(&name)
-                .cloned()
-                .unwrap_or_else(|| DEFAULT_CRAN_MIRROR.to_owned());
-            (name, ResolvedPackage { version_spec, repo })
-        })
-        .collect();
+    let mut packages = BTreeMap::new();
+    for (name, specs) in pkg_specs {
+        // Only one spec per name is possible today — package_deps is a
+        // BTreeMap, so a duplicate key already collapses upstream during
+        // TOML parsing. This stays a hard error rather than a silent
+        // pick-the-first once transitive module resolution (the TODO
+        // above) starts pushing a second spec for the same package: a
+        // real conflict should surface here, not resolve to whichever
+        // constraint happened to arrive first.
+        let version_spec = match specs.as_slice() {
+            [] => "*".to_owned(),
+            [only] => format!("{only}"),
+            multiple => {
+                let constraints: Vec<String> = multiple.iter().map(|s| s.to_string()).collect();
+                bail!(
+                    "'{name}' has {} conflicting version constraints ({}) — \
+                     carrier doesn't merge these yet.",
+                    multiple.len(),
+                    constraints.join(", ")
+                );
+            }
+        };
+        let repo = pkg_repos
+            .get(&name)
+            .cloned()
+            .unwrap_or_else(|| DEFAULT_CRAN_MIRROR.to_owned());
+        packages.insert(name, ResolvedPackage { version_spec, repo });
+    }
 
     let modules = mod_specs
         .into_keys()
