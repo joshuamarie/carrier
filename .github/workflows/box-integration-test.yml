@@ -59,8 +59,27 @@ jobs:
 
             - name: "Trivial Rscript, no package or library reference (windows only)"
               if: runner.os == 'Windows'
-              shell: bash
               run: Rscript -e 'cat("hello\n")'
+            
+            - name: "Probe: open a file connection in _temp (windows only)"
+              if: runner.os == 'Windows'
+              continue-on-error: true
+              run: Rscript -e 'con = file("D:/a/_temp/probe.log", open = "w"); writeLines("ok", con); close(con); cat("file probe ok\n")'
+            
+            - name: "Probe: list.dirs on the R library (windows only)"
+              if: runner.os == 'Windows'
+              continue-on-error: true
+              run: Rscript -e 'pkgs = list.dirs("D:/a/_temp/Library", recursive = FALSE, full.names = FALSE); cat("found", length(pkgs), "packages\n")'
+            
+            - name: "Probe: loadNamespace a pure-R package, no compiled code (windows only)"
+              if: runner.os == 'Windows'
+              continue-on-error: true
+              run: Rscript -e 'loadNamespace("magrittr", lib.loc = "D:/a/_temp/Library"); cat("magrittr ok\n")'
+            
+            - name: "Probe: loadNamespace a compiled package (windows only)"
+              if: runner.os == 'Windows'
+              continue-on-error: true
+              run: Rscript -e 'loadNamespace("rlang", lib.loc = "D:/a/_temp/Library"); cat("rlang ok\n")'
             
             - name: "Load each installed package individually (windows only)"
               if: runner.os == 'Windows'
