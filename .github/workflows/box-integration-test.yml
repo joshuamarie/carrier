@@ -56,6 +56,20 @@ jobs:
                   Rscript -e 'cat(.libPaths(), sep="\n")'
                   echo "TEMP=$TEMP"
                   echo "RUNNER_TEMP=$RUNNER_TEMP"
+
+            - name: "Load each installed package individually (windows only)"
+              if: runner.os == 'Windows'
+              shell: bash
+              run: |
+                  Rscript -e '
+                  lib = "D:/a/_temp/Library"
+                  pkgs = list.dirs(lib, recursive = FALSE, full.names = FALSE)
+                  for (p in pkgs) {
+                      cat("loading", p, "...\n"); flush(stdout())
+                      loadNamespace(p, lib.loc = lib)
+                      cat("  ok\n"); flush(stdout())
+                  }
+                  '
             
             - name: "Verify box::use() resolves the installed module"
               shell: bash
