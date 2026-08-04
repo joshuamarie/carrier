@@ -1,7 +1,7 @@
 //! Install a pre-built (binary) R package archive without invoking R.
 //!
 //! A binary package archive is already the finished output of `R CMD
-//! INSTALL` — configure has run, any compiled code is built, help/Rd
+//! INSTALL` (configure has run), so any compiled code is built, help/Rd
 //! files are converted. Installing one is just "put these files in the
 //! library", so this module extracts directly instead of shelling out
 //! to R a second time.
@@ -22,8 +22,8 @@ use tempfile::TempDir;
 ///
 /// Extraction lands in a temp staging directory first. Only after the
 /// staged tree passes `verify_built_package` and `verify_binary_arch` is it
-/// moved into place — so a bad download, or one for the wrong CPU
-/// architecture, never overwrites a working install.
+/// moved into place (so a bad download, or one for the wrong CPU
+/// architecture, never overwrites a working install).
 pub fn install_binary_package(
     archive_path: &Path,
     lib_path: &Path,
@@ -59,21 +59,34 @@ pub fn install_binary_package(
             .with_context(|| format!("Failed to remove existing install at {}", dest.display()))?;
     }
 
-    std::fs::rename(&staged_pkg, &dest).or_else(|rename_err| {
-        eprintln!("[carrier] rename failed for {package_name} ({rename_err}), falling back to copy");
-        copy_dir_recursive(&staged_pkg, &dest)?;
-        std::fs::remove_dir_all(&staged_pkg).ok();
-        Ok::<(), anyhow::Error>(())
-    })?;
+    // Staging dir and lib_path may be on different filesystems (temp dir vs
+    // a user-configured lib path), which makes rename() fail with EXDEV —
+    // this is the common case on Windows CI, where TEMP and R_LIBS_USER
+    // routinely land on different drives. Fall back to copy + remove, and
+    // re-verify the moved copy: the checks above only ran against the
+    // staged pre-move tree, so a copy that goes wrong needs its own check
+    // rather than relying on the earlier pass.
+    match std::fs::rename(&staged_pkg, &dest) {
+        Ok(()) => {}
+        Err(rename_err) => {
+            eprintln!(
+                "[carrier] rename failed for {package_name} ({rename_err}), falling back to copy"
+            );
+            copy_dir_recursive(&staged_pkg, &dest)?;
+            verify_built_package(&dest, package_name)?;
+            std::fs::remove_dir_all(&staged_pkg)
+                .with_context(|| format!("Failed to clean up staging dir for {package_name}"))?;
+        }
+    }
 
     Ok(())
 }
 
-/// A properly built R package — binary tarball or zip — always contains
+/// A properly built R package (binary tarball or zip) always contains
 /// `Meta/package.rds`; a source tree never does. Without this check, a
 /// source tarball served where a binary was expected (or a truncated
 /// download) would extract cleanly, report success, and only fail later
-/// at a `library()` call — possibly in a different session entirely.
+/// at a `library()` call, possibly in a different session entirely.
 fn verify_built_package(staged_pkg: &Path, package_name: &str) -> Result<()> {
     if staged_pkg.join("Meta").join("package.rds").exists() {
         return Ok(());
@@ -95,7 +108,7 @@ fn verify_built_package(staged_pkg: &Path, package_name: &str) -> Result<()> {
 /// URL-only check misses exactly that case.
 ///
 /// Returns `Ok(None)` when the format isn't recognized (e.g. a fat/
-/// universal Mach-O, or anything else this doesn't parse) — an
+/// universal Mach-O, or anything else this doesn't parse). An
 /// unrecognized format isn't evidence of a mismatch, only something this
 /// check doesn't cover.
 fn binary_file_arch(path: &Path) -> Result<Option<&'static str>> {
@@ -237,7 +250,7 @@ fn extract_tgz(tgz_path: &Path, dest_root: &Path) -> Result<()> {
                     .with_context(|| format!("Failed to symlink {}", dest.display()))?;
             }
             // Hardlinks, devices, FIFOs, PAX globals, etc. don't show up in
-            // R package tarballs in practice — skip anything unrecognized
+            // R package tarballs in practice. Skip anything unrecognized
             // rather than fail the whole install over it.
             _ => {}
         }
@@ -282,11 +295,37 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
         let entry = entry?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
+        let file_type = entry.file_type()?;
+
+        if file_type.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
+        } else if file_type.is_symlink() {
+            copy_symlink(&src_path, &dst_path)?;
         } else {
             std::fs::copy(&src_path, &dst_path)?;
         }
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn copy_symlink(src: &Path, dst: &Path) -> Result<()> {
+    let target = std::fs::read_link(src)
+        .with_context(|| format!("Failed to read symlink {}", src.display()))?;
+    std::os::unix::fs::symlink(&target, dst)
+        .with_context(|| format!("Failed to recreate symlink {}", dst.display()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn copy_symlink(src: &Path, dst: &Path) -> Result<()> {
+    // Windows binary packages don't ship symlinks 
+    // `extract_zip` never creates one, 
+    // so seeing one here means something upstream changed.
+    // Fail loudly rather than guess at how to recreate it.
+    bail!(
+        "Unexpected symlink at {} during copy to {} — not supported on this platform",
+        src.display(),
+        dst.display()
+    );
 }
