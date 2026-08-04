@@ -62,8 +62,10 @@ jobs:
               shell: bash
               run: |
                   Rscript -e '
+                  cat("R STARTED\n"); flush(stdout())
                   lib = "D:/a/_temp/Library"
                   pkgs = list.dirs(lib, recursive = FALSE, full.names = FALSE)
+                  cat("found", length(pkgs), "packages\n"); flush(stdout())
                   for (p in pkgs) {
                       cat("loading", p, "...\n"); flush(stdout())
                       loadNamespace(p, lib.loc = lib)
