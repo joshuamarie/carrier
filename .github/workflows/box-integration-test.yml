@@ -57,38 +57,31 @@ jobs:
                   echo "TEMP=$TEMP"
                   echo "RUNNER_TEMP=$RUNNER_TEMP"
 
-            - name: "Isolate shell vs multiplicity (windows only)"
+            - name: "Write probe script (windows only)"
               if: runner.os == 'Windows'
-              continue-on-error: true
               run: |
-                  Rscript -e '
+                  Set-Content -Path D:\a\_temp\probe.R -Value @'
                   lib = "D:/a/_temp/Library"
                   pkgs = list.dirs(lib, recursive = FALSE, full.names = FALSE)
-                  cat("[pwsh] found", length(pkgs), "packages\n")
+                  cat("found", length(pkgs), "packages\n")
                   for (p in pkgs) {
-                      cat("[pwsh] loading", p, "...\n")
+                      cat("loading", p, "...\n")
                       loadNamespace(p, lib.loc = lib)
-                      cat("[pwsh]  ok:", p, "\n")
+                      cat(" ok:", p, "\n")
                   }
-                  cat("[pwsh] loop complete\n")
-                  '
+                  cat("loop complete\n")
+                  '@
 
-            - name: "Isolate shell vs multiplicity, bash (windows only)"
+            - name: "Run probe.R via pwsh (windows only)"
+              if: runner.os == 'Windows'
+              continue-on-error: true
+              run: Rscript D:\a\_temp\probe.R
+
+            - name: "Run probe.R via bash (windows only)"
               if: runner.os == 'Windows'
               shell: bash
               continue-on-error: true
-              run: |
-                  Rscript -e '
-                  lib = "D:/a/_temp/Library"
-                  pkgs = list.dirs(lib, recursive = FALSE, full.names = FALSE)
-                  cat("[bash] found", length(pkgs), "packages\n")
-                  for (p in pkgs) {
-                      cat("[bash] loading", p, "...\n")
-                      loadNamespace(p, lib.loc = lib)
-                      cat("[bash]  ok:", p, "\n")
-                  }
-                  cat("[bash] loop complete\n")
-                  '
+              run: Rscript D:/a/_temp/probe.R
 
             - name: "Verify box::use() resolves the installed module"
               shell: bash
