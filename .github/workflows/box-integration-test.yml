@@ -62,16 +62,23 @@ jobs:
               shell: bash
               run: |
                   Rscript -e '
-                  cat("R STARTED\n"); flush(stdout())
+                  con = file("D:/a/_temp/progress.log", open = "w")
+                  writeLines("R STARTED", con); flush(con)
                   lib = "D:/a/_temp/Library"
                   pkgs = list.dirs(lib, recursive = FALSE, full.names = FALSE)
-                  cat("found", length(pkgs), "packages\n"); flush(stdout())
+                  writeLines(paste("found", length(pkgs), "packages"), con); flush(con)
                   for (p in pkgs) {
-                      cat("loading", p, "...\n"); flush(stdout())
+                      writeLines(paste("loading", p, "..."), con); flush(con)
                       loadNamespace(p, lib.loc = lib)
-                      cat("  ok\n"); flush(stdout())
+                      writeLines(paste(" ok:", p), con); flush(con)
                   }
+                  close(con)
                   '
+            
+            - name: "Show progress log regardless of crash (windows only)"
+              if: always() && runner.os == 'Windows'
+              shell: bash
+              run: cat D:/a/_temp/progress.log || echo "progress.log was never created"
             
             - name: "Verify box::use() resolves the installed module"
               shell: bash
