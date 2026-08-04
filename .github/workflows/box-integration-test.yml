@@ -57,6 +57,11 @@ jobs:
                   echo "TEMP=$TEMP"
                   echo "RUNNER_TEMP=$RUNNER_TEMP"
 
+            - name: "Trivial Rscript, no package or library reference (windows only)"
+              if: runner.os == 'Windows'
+              shell: bash
+              run: Rscript -e 'cat("hello\n")'
+            
             - name: "Load each installed package individually (windows only)"
               if: runner.os == 'Windows'
               shell: bash
