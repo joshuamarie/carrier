@@ -57,6 +57,15 @@ jobs:
                   echo "TEMP=$TEMP"
                   echo "RUNNER_TEMP=$RUNNER_TEMP"
 
+            - name: "Compare PATH: pwsh vs rtools bash (windows only)"
+              if: runner.os == 'Windows'
+              run: echo $env:PATH
+            
+            - name: "Compare PATH: pwsh vs rtools bash (windows only, bash)"
+              if: runner.os == 'Windows'
+              shell: bash
+              run: echo $PATH
+            
             - name: "Trivial Rscript, no package or library reference (windows only)"
               if: runner.os == 'Windows'
               run: Rscript -e 'cat("hello\n")'
