@@ -1,14 +1,11 @@
 use anyhow::{bail, Context, Result};
-use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
-use semver::Version;
 use tempfile::TempDir;
 
 use ::tar::Archive as TarArchive;
 use crate::carrier_toml::PackageDep;
 use crate::formats::{rmbx, tar};
-use crate::lockfile;
 use crate::ops::resolve;
 use crate::paths::resolve_install_dir;
 
@@ -20,11 +17,11 @@ enum InstallSource {
     Registry { name: String, repo: String },
 }
 
-pub fn run(source: &str, install_deps: bool, repo: Option<&str>, write_lock: bool) -> Result<()> {
+pub fn run(source: &str, install_deps: bool, repo: Option<&str>) -> Result<()> {
     match parse_source(source, repo)? {
         InstallSource::Rmbx(path) => install_from_rmbx(&path, install_deps),
-        InstallSource::Tar(path) => install_from_tar(&path, install_deps).map(|_resolved| ()),
-        InstallSource::Dir(path) => install_from_dir(&path, install_deps, write_lock),
+        InstallSource::Tar(path) => install_from_tar(&path, install_deps),
+        InstallSource::Dir(path) => install_from_dir(&path, install_deps),
         InstallSource::GitHub { user, repo, subpath } => {
             install_from_github(&user, &repo, subpath.as_deref(), install_deps)
         }
@@ -111,7 +108,7 @@ fn parse_source(s: &str, repo: Option<&str>) -> Result<InstallSource> {
     }
 
     // Bare name, no path signal, no gh: prefix: --repo is what turns this
-    // into a registry lookup. Without it, the name is still reserved —
+    // into a registry lookup. Without it, the name is still reserved,
     // just not resolvable to anything yet.
     match repo {
         Some(repo_url) => Ok(InstallSource::Registry { name: s.to_owned(), repo: repo_url.to_owned() }),
@@ -219,16 +216,12 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<HashMap<St
     let plan = resolve::resolve(&toml.package_deps, &toml.module_deps)?;
     println!("Dependencies:");
     resolve::print_plan(&plan);
-    let resolved = resolve::execute_plan(&plan, !install_deps, None)?;
+    resolve::execute_plan(&plan, !install_deps, None)?;
 
-    Ok(resolved)
+    Ok(())
 }
 
-/// `write_lock` only applies here: this is the one install path where
-/// `project_root` (and its `carrier.toml`) is still on disk after the
-/// install, unlike the rmbx/tar/GitHub/registry paths, which only ever
-/// see a bundled archive.
-fn install_from_dir(project_root: &PathBuf, install_deps: bool, write_lock: bool) -> Result<()> {
+fn install_from_dir(project_root: &PathBuf, install_deps: bool) -> Result<()> {
     if !project_root.join("carrier.toml").exists() {
         bail!(
             "No carrier.toml found in {}. Is this a carrier module project?",
@@ -242,20 +235,7 @@ fn install_from_dir(project_root: &PathBuf, install_deps: bool, write_lock: bool
     crate::ops::bundle::bundle_to(project_root, &output_path, false)
         .context("Failed to bundle project")?;
 
-    let resolved = install_from_tar(&output_path, install_deps)?;
-
-    // A project with no package deps (e.g. straight out of `carrier
-    // init`, where the template's package_deps entries are commented
-    // out) resolves to an empty set. Writing a lock file with zero
-    // entries would look like "we checked, there's nothing to pin" —
-    // indistinguishable from "we never resolved deps at all" once
-    // install_deps is off. Only write when there's something to lock.
-    if write_lock && !resolved.is_empty() {
-        lockfile::write(project_root, &resolved.into_iter().collect())?;
-        println!("Wrote {}", lockfile::LOCK_FILE_NAME);
-    }
-
-    Ok(())
+    install_from_tar(&output_path, install_deps)
 }
 
 #[cfg(feature = "network")]
@@ -303,7 +283,7 @@ fn install_from_github(user: &str, repo: &str, subpath: Option<&str>, install_de
     crate::ops::bundle::bundle_to(&project_root, &output_path, false)
         .context("Failed to bundle downloaded module")?;
 
-    install_from_tar(&output_path, install_deps).map(|_resolved| ())
+    install_from_tar(&output_path, install_deps)
 }
 
 #[cfg(not(feature = "network"))]
