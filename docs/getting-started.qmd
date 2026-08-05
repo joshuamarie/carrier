@@ -87,14 +87,40 @@ By default, R package dependencies are only *planned*, not installed. To install
 carrier install rmod_0.1.0.tar.gz --install-deps
 ```
 
-## 5. Use it from R
+## 5. Lock dependencies (optional)
+
+Resolving `[package_deps]` against CRAN can settle on a different version each time you install — a new release published upstream, a different mirror, and so on. To pin what carrier resolved so a later install reproduces it exactly, write a lock file:
+
+``` bash
+carrier lock .
+```
+
+This writes `carrier.lock` next to `carrier.toml`, listing every resolved package with its exact version and repo. Commit it alongside your module so anyone else installing it gets the same versions.
+
+``` bash
+carrier lock . --update
+```
+
+`--update` ignores any existing lock and re-resolves everything fresh — use it when you want to deliberately pick up newer versions rather than stay pinned.
+
+You can also write the lock as part of installing from a local directory, with `--write-lock`:
+
+``` bash
+carrier install . --install-deps --write-lock
+```
+
+A project with no `[package_deps]` resolves to nothing to pin, so `--write-lock` is a no-op in that case — no `carrier.lock` is written.
+
+Once a lock exists, later installs use it automatically: any package the lock pins installs at that exact version instead of being re-resolved, while anything not in the lock (e.g. a dependency you just added) still resolves fresh.
+
+## 6. Use it from R
 
 ``` r
 box::use(rmod)
 rmod$module1$fn(...)
 ```
 
-## 6. Remove it
+## 7. Remove it
 
 ``` bash
 carrier remove rmod
