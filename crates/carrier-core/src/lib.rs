@@ -4,7 +4,8 @@ pub mod formats;
 pub mod manifest;
 pub mod ops;
 pub mod paths;
-pub mod version;    
+pub mod version;
+pub mod lockfile;
 
 pub use carrier_toml::CarrierToml;
 pub use manifest::Manifest;
