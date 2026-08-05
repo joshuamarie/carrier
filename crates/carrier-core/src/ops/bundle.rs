@@ -89,6 +89,11 @@ fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
             .clone()
             .unwrap_or_default()
             .into_iter()
+            .map(|(name, dep)| crate::manifest::ModuleDepEntry {
+                name,
+                version: dep.version().to_owned(),
+                source: dep.source().map(str::to_owned),
+            })
             .collect(),
     };
 
