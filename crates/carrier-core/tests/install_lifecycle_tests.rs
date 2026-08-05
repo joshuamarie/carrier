@@ -18,7 +18,7 @@ fn unique_dir(label: &str) -> PathBuf {
 
 struct Scratch(PathBuf);
 impl Scratch {
-    /// Reserves a unique path without creating it — for dirs that the
+    /// Reserves a unique path without creating it. For dirs that the
     /// function under test (init::run, install::run) is expected to
     /// create itself.
     fn reserved(label: &str) -> Self {
@@ -76,15 +76,16 @@ fn install_from_dir_then_remove_round_trip() {
 
     // install_deps = false → dependency install is a dry run, so this
     // never touches the network even though the project has no deps.
-    install::run(project.path().to_str().unwrap(), false, None).unwrap();
+    // write_lock = false (this test isn't about `carrier.lock`).
+    install::run(project.path().to_str().unwrap(), false, None, false).unwrap();
 
     let module_dir = lib.path().join("roundtripmod");
     assert!(module_dir.join("__init__.R").is_file());
     let dist_info = lib.path().join("roundtripmod-0.1.0.dist-info");
     assert!(dist_info.join("manifest.json").is_file());
 
-    // carrier.toml is a project manifest, not part of the installable
-    // module — it must not end up in the installed tree.
+    // `carrier.toml` is a project manifest, not part of the installable module
+    // It must not end up in the installed tree
     assert!(!module_dir.join("carrier.toml").exists());
 
     remove::run("roundtripmod", true).unwrap();
@@ -107,7 +108,7 @@ fn reinstalling_replaces_the_previous_install() {
     let lib = Scratch::reserved("lib-reinstall");
     let _env = CarrierLibGuard::set(lib.path());
 
-    install::run(project.path().to_str().unwrap(), false, None).unwrap();
+    install::run(project.path().to_str().unwrap(), false, None, false).unwrap();
 
     // Add a stray file directly into the installed module dir that a
     // clean reinstall should wipe out.
@@ -115,7 +116,7 @@ fn reinstalling_replaces_the_previous_install() {
     std::fs::write(module_dir.join("stale.R"), "leftover").unwrap();
     assert!(module_dir.join("stale.R").exists());
 
-    install::run(project.path().to_str().unwrap(), false, None).unwrap();
+    install::run(project.path().to_str().unwrap(), false, None, false).unwrap();
     assert!(!module_dir.join("stale.R").exists());
     assert!(module_dir.join("__init__.R").is_file());
 }
@@ -139,6 +140,25 @@ fn install_errors_on_project_without_carrier_toml() {
     let lib = Scratch::reserved("lib-no-toml");
     let _env = CarrierLibGuard::set(lib.path());
 
-    let err = install::run(project.path().to_str().unwrap(), false, None).unwrap_err();
+    let err = install::run(project.path().to_str().unwrap(), false, None, false).unwrap_err();
     assert!(err.to_string().contains("carrier.toml"));
+}
+
+#[test]
+fn write_lock_with_no_package_deps_writes_nothing() {
+    let _guard = ENV_LOCK.lock().unwrap();
+
+    // carrier init's default template comments out every package_deps
+    // entry, so a freshly-scaffolded project resolves to zero packages.
+    // Rhis stays network-free the same way every other test here does,
+    // even with `install_deps` and `write_lock` both true.
+    let project = Scratch::reserved("project-write-lock-empty");
+    init::run("emptydepsmod", Some(project.path().to_str().unwrap())).unwrap();
+
+    let lib = Scratch::reserved("lib-write-lock-empty");
+    let _env = CarrierLibGuard::set(lib.path());
+
+    install::run(project.path().to_str().unwrap(), true, None, true).unwrap();
+
+    assert!(!project.path().join("carrier.lock").exists());
 }
