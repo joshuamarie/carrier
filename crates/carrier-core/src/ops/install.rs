@@ -1,11 +1,14 @@
 use anyhow::{bail, Context, Result};
+use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
+use semver::Version;
 use tempfile::TempDir;
 
 use ::tar::Archive as TarArchive;
 use crate::carrier_toml::PackageDep;
 use crate::formats::{rmbx, tar};
+use crate::lockfile;
 use crate::ops::resolve;
 use crate::paths::resolve_install_dir;
 
@@ -17,11 +20,11 @@ enum InstallSource {
     Registry { name: String, repo: String },
 }
 
-pub fn run(source: &str, install_deps: bool, repo: Option<&str>) -> Result<()> {
+pub fn run(source: &str, install_deps: bool, repo: Option<&str>, write_lock: bool) -> Result<()> {
     match parse_source(source, repo)? {
         InstallSource::Rmbx(path) => install_from_rmbx(&path, install_deps),
-        InstallSource::Tar(path) => install_from_tar(&path, install_deps),
-        InstallSource::Dir(path) => install_from_dir(&path, install_deps),
+        InstallSource::Tar(path) => install_from_tar(&path, install_deps).map(|_resolved| ()),
+        InstallSource::Dir(path) => install_from_dir(&path, install_deps, write_lock),
         InstallSource::GitHub { user, repo, subpath } => {
             install_from_github(&user, &repo, subpath.as_deref(), install_deps)
         }
@@ -172,12 +175,16 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
     let plan = resolve::resolve(&package_deps, &None)?;
     println!("Dependencies:");
     resolve::print_plan(&plan);
-    resolve::execute_plan(&plan, !install_deps)?;
+    resolve::execute_plan(&plan, !install_deps, None)?;
 
     Ok(())
 }
 
-fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<()> {
+/// Returns the full resolved R package set (direct and transitive) that
+/// `execute_plan` produced, so a caller installing from a local
+/// directory can write it out as `carrier.lock` when `--write-lock` is
+/// passed. A dry run or a plan with no packages yields an empty map.
+fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<HashMap<String, (Version, String)>> {
     if !tar_path.exists() {
         bail!("File not found: {}", tar_path.display());
     }
@@ -212,12 +219,16 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<()> {
     let plan = resolve::resolve(&toml.package_deps, &toml.module_deps)?;
     println!("Dependencies:");
     resolve::print_plan(&plan);
-    resolve::execute_plan(&plan, !install_deps)?;
+    let resolved = resolve::execute_plan(&plan, !install_deps, None)?;
 
-    Ok(())
+    Ok(resolved)
 }
 
-fn install_from_dir(project_root: &PathBuf, install_deps: bool) -> Result<()> {
+/// `write_lock` only applies here: this is the one install path where
+/// `project_root` (and its `carrier.toml`) is still on disk after the
+/// install, unlike the rmbx/tar/GitHub/registry paths, which only ever
+/// see a bundled archive.
+fn install_from_dir(project_root: &PathBuf, install_deps: bool, write_lock: bool) -> Result<()> {
     if !project_root.join("carrier.toml").exists() {
         bail!(
             "No carrier.toml found in {}. Is this a carrier module project?",
@@ -231,7 +242,20 @@ fn install_from_dir(project_root: &PathBuf, install_deps: bool) -> Result<()> {
     crate::ops::bundle::bundle_to(project_root, &output_path, false)
         .context("Failed to bundle project")?;
 
-    install_from_tar(&output_path, install_deps)
+    let resolved = install_from_tar(&output_path, install_deps)?;
+
+    // A project with no package deps (e.g. straight out of `carrier
+    // init`, where the template's package_deps entries are commented
+    // out) resolves to an empty set. Writing a lock file with zero
+    // entries would look like "we checked, there's nothing to pin" —
+    // indistinguishable from "we never resolved deps at all" once
+    // install_deps is off. Only write when there's something to lock.
+    if write_lock && !resolved.is_empty() {
+        lockfile::write(project_root, &resolved.into_iter().collect())?;
+        println!("Wrote {}", lockfile::LOCK_FILE_NAME);
+    }
+
+    Ok(())
 }
 
 #[cfg(feature = "network")]
@@ -279,7 +303,7 @@ fn install_from_github(user: &str, repo: &str, subpath: Option<&str>, install_de
     crate::ops::bundle::bundle_to(&project_root, &output_path, false)
         .context("Failed to bundle downloaded module")?;
 
-    install_from_tar(&output_path, install_deps)
+    install_from_tar(&output_path, install_deps).map(|_resolved| ())
 }
 
 #[cfg(not(feature = "network"))]
