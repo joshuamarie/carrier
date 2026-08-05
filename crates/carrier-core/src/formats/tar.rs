@@ -6,7 +6,7 @@ use flate2::{write::GzEncoder, Compression};
 use tar::Builder;
 
 use crate::manifest::Manifest;
-use crate::carrier_toml::PackageDep;
+use crate::carrier_toml::{ModuleDep, PackageDep};
 
 /// Bundle a module into a `.tar.gz` archive.
 ///
@@ -180,6 +180,13 @@ pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
                 module_deps: Some(
                     manifest.dependencies.modules
                         .into_iter()
+                        .map(|entry| {
+                            let dep = match entry.source {
+                                Some(source) => ModuleDep::Extended { version: entry.version, source: Some(source) },
+                                None => ModuleDep::Simple(entry.version),
+                            };
+                            (entry.name, dep)
+                        })
                         .collect()
                 ),
                 test: None,
