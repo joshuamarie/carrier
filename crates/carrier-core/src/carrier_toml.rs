@@ -96,6 +96,10 @@ impl PackageDep {
 }
 
 // ---- ModuleDep ----
+/// `Simple(String)` mirrors `PackageDep::Simple` structurally, but there
+/// is no CRAN-equivalent default registry for modules. A `Simple` dep
+/// has a version constraint and nowhere to resolve it from. Resolution
+/// must treat a missing `source` as a hard error, not a fallback.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
