@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 pub const DEFAULT_CRAN_MIRROR: &str = "https://cloud.r-project.org";
 
-// ── Author ────────────────────────────────────────────────────────────────────
+// ---- Author ----
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
@@ -68,7 +68,7 @@ impl std::fmt::Display for Author {
     }
 }
 
-// ── PackageDep ────────────────────────────────────────────────────────────────
+// ---- PackageDep ----
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
@@ -95,13 +95,38 @@ impl PackageDep {
     }
 }
 
-// ── CarrierToml ───────────────────────────────────────────────────────────────
+// ---- ModuleDep ----
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum ModuleDep {
+    Simple(String),
+    Extended { version: String, source: Option<String> },
+}
+
+impl ModuleDep {
+    pub fn version(&self) -> &str {
+        match self {
+            ModuleDep::Simple(v) => v,
+            ModuleDep::Extended { version, .. } => version,
+        }
+    }
+
+    pub fn source(&self) -> Option<&str> {
+        match self {
+            ModuleDep::Simple(_) => None,
+            ModuleDep::Extended { source, .. } => source.as_deref(),
+        }
+    }
+}
+
+// ---- CarrierToml (For metadata file) ----
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CarrierToml {
     pub module: ModuleMeta,
     pub package_deps: Option<BTreeMap<String, PackageDep>>,
-    pub module_deps: Option<BTreeMap<String, String>>,
+    pub module_deps: Option<BTreeMap<String, ModuleDep>>,
     pub test: Option<TestConfig>,
 }
 
@@ -113,7 +138,7 @@ pub struct ModuleMeta {
     /// Structured author entries. Each entry can be a plain string or an
     /// inline table with optional `email`, `url`, and `orcid` fields.
     ///
-    /// ```toml
+    /// ``` toml
     /// # Simple
     /// authors = ["Joshua Marie"]
     ///
@@ -142,8 +167,6 @@ pub struct TestConfig {
     pub framework: String,
     pub dir: Option<String>,
 }
-
-// ── impl CarrierToml ──────────────────────────────────────────────────────────
 
 impl CarrierToml {
     pub fn from_dir(project_root: &Path) -> Result<Self> {
