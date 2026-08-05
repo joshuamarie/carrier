@@ -1,58 +1,35 @@
-use std::path::PathBuf;
-
-use anyhow::{bail, Result};
+use anyhow::{Context, Result};
+use std::path::Path;
 
 use crate::carrier_toml::CarrierToml;
+use crate::lockfile;
 use crate::ops::resolve;
 
-/// Resolve a project's `package_deps` to exact versions and write
-/// `carrier.lock`, without installing anything.
-///
-/// By default, reuses an existing lock's pins where they're still valid
-/// (via the same lock-aware path `resolve_packages` already uses for
-/// `carrier install --write-lock`), so re-running this with no real
-/// change to `carrier.toml` produces the same file. Pass `update = true`
-/// to ignore the existing lock entirely and re-resolve everything fresh
-/// — the equivalent of `poetry lock --no-cache` / `cargo update`.
+/// Resolve `path`'s R package dependencies to exact versions and repos,
+/// then write `carrier.lock`. With `update: true`, any existing lock is
+/// ignored and everything is re-resolved fresh; otherwise packages the
+/// lock already pins are kept at their pinned version (see
+/// `resolve_only` / `resolve_all`'s locked-package handling).
 pub fn run(path: &str, update: bool) -> Result<()> {
-    let project_root = PathBuf::from(path);
-    if !project_root.join("carrier.toml").exists() {
-        bail!(
-            "No carrier.toml found in {}. Is this a carrier module project?",
-            project_root.display()
-        );
-    }
+    let project_root = Path::new(path);
 
-    let toml = CarrierToml::from_dir(&project_root)?;
+    let toml_path = project_root.join("carrier.toml");
+    let contents = std::fs::read_to_string(&toml_path)
+        .with_context(|| format!("Failed to read {}", toml_path.display()))?;
+    let toml: CarrierToml = ::toml::from_str(&contents)
+        .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
+
+    let existing = if update { None } else { lockfile::read(project_root)? };
+
     let plan = resolve::resolve(&toml.package_deps, &toml.module_deps)?;
+    let resolved = resolve::resolve_only(&plan, existing.as_ref())?;
 
-    if plan.packages.is_empty() {
-        println!("  No R package dependencies to lock.");
-        return Ok(());
-    }
-
-    let existing_lock = if update {
-        None
-    } else {
-        crate::lockfile::read(&project_root)?
-    };
-
-    let resolved = resolve::resolve_only(&plan, existing_lock.as_ref())?;
-
-    if resolved.is_empty() {
-        println!("  Nothing resolved — {} not written.", crate::lockfile::LOCK_FILE_NAME);
-        return Ok(());
-    }
-
-    let count = resolved.len();
-    let locked: std::collections::BTreeMap<_, _> = resolved.into_iter().collect();
-    crate::lockfile::write(&project_root, &locked)?;
-    println!(
-        "  Wrote {} ({} package{})",
-        crate::lockfile::LOCK_FILE_NAME,
-        count,
-        if count == 1 { "" } else { "s" }
-    );
+    lockfile::write(project_root, &resolved.into_iter().collect())?;
+    println!("Wrote {} ({} packages)", lockfile::LOCK_FILE_NAME, plan_len(&plan));
 
     Ok(())
+}
+
+fn plan_len(plan: &resolve::ResolvedPlan) -> usize {
+    plan.packages.len()
 }
