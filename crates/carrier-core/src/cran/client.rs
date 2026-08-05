@@ -6,6 +6,7 @@ use anyhow::{bail, Context, Result};
 use semver::Version;
 
 use crate::cran::packages::{fetch, fetch_archive_versions, PackageRecord};
+use crate::lockfile::CarrierLock;
 use crate::ops::resolve::ResolvedPackage;
 use crate::version::VersionSpec;
 use crate::paths::{detect_r_platform, RPlatformOs};
@@ -50,14 +51,28 @@ struct ResolvedInstall {
     version: Version,
 }
 
-/// Install a set of resolved R packages into `lib_path`.
+struct RepoResolution {
+    index: HashMap<String, PackageRecord>,
+    to_install: HashMap<String, ResolvedInstall>,
+}
+
+/// Resolve every package (direct and transitive) needed to satisfy
+/// `packages`, without downloading or installing anything. Shared by
+/// `install_packages` (resolve, then install) and `resolve_packages()`
+/// (resolve only — what `carrier lock` calls). Packages are grouped by
+/// repo so each PACKAGES.gz is fetched only once per repository.
 ///
-/// Packages are grouped by repo so each PACKAGES.gz is fetched only once
-/// per repository.
-pub fn install_packages(
+/// If `lock` is `Some`, any requested package it pins is used at that
+/// exact version without touching `resolve_install_set` at all. There'll be 
+/// no constraint solving, no archive fallback, no index-based resolution
+/// for that name. A package the lock doesn't mention still resolves
+/// fresh, the same way it would with no lock present. This lets a
+/// newly added dependency work before the lock is re-written to cover
+/// it.
+fn resolve_all(
     packages: &BTreeMap<String, ResolvedPackage>,
-    lib_path: &Path,
-) -> Result<()> {
+    lock: Option<&CarrierLock>,
+) -> Result<(BTreeMap<String, RepoResolution>, HashMap<String, (Version, String)>)> {
     let mut by_repo: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for (name, pkg) in packages {
         by_repo
@@ -66,20 +81,90 @@ pub fn install_packages(
             .insert(name.clone(), pkg.version_spec.clone());
     }
 
-    std::fs::create_dir_all(lib_path)
-        .with_context(|| format!("Failed to create R lib dir: {}", lib_path.display()))?;
-
-    // Shared across all repo groups in this run, so a package appearing as
-    // a transitive dep under more than one repo isn't independently
-    // re-resolved (and potentially silently downgraded) by whichever repo
-    // group happens to process it last.
+    // Shared across all repo groups, so a package appearing as a
+    // transitive dep under more than one repo isn't independently
+    // re-resolved (and potentially silently downgraded) by whichever
+    // repo group happens to process it last.
     let mut globally_resolved: HashMap<String, (Version, String)> = HashMap::new();
+    let mut per_repo: BTreeMap<String, RepoResolution> = BTreeMap::new();
 
     for (repo, pkgs) in &by_repo {
         println!("Fetching package index from {}...", repo);
         let index = fetch(repo)?;
-        let to_install = resolve_install_set(pkgs, &index, repo, &mut globally_resolved)?;
-        let order = topo_order(&to_install, &index);
+
+        let mut to_install: HashMap<String, ResolvedInstall> = HashMap::new();
+        let mut unlocked: BTreeMap<String, String> = BTreeMap::new();
+
+        for (name, spec) in pkgs {
+            let locked = match lock {
+                Some(l) => l.locked_version(name)?,
+                None => None,
+            };
+            match locked {
+                Some((version, locked_repo)) => {
+                    if locked_repo != *repo {
+                        bail!(
+                            "carrier.lock pins '{name}' to repo {locked_repo}, but carrier.toml \
+                             now points at {repo}. Re-run with --write-lock (or `carrier lock`) \
+                             to update the lock, or revert carrier.toml's repo for this package."
+                        );
+                    }
+                    globally_resolved.insert(name.clone(), (version.clone(), repo.clone()));
+                    to_install.insert(name.clone(), ResolvedInstall { version });
+                }
+                None => {
+                    unlocked.insert(name.clone(), spec.clone());
+                }
+            }
+        }
+
+        if !unlocked.is_empty() {
+            let resolved = resolve_install_set(&unlocked, &index, repo, &mut globally_resolved)?;
+            for (name, r) in &resolved {
+                globally_resolved.insert(name.clone(), (r.version.clone(), repo.clone()));
+            }
+            to_install.extend(resolved);
+        }
+
+        per_repo.insert(repo.clone(), RepoResolution { index, to_install });
+    }
+
+    Ok((per_repo, globally_resolved))
+}
+
+/// Resolve every package (direct and transitive) to exact versions and
+/// repos, without downloading or installing anything — what `carrier
+/// lock` calls. Only the PACKAGES.gz indices get fetched; no individual
+/// package's source or binary is ever transferred, which is what makes
+/// this cheap enough to run just to check or refresh a lock.
+pub fn resolve_packages(
+    packages: &BTreeMap<String, ResolvedPackage>,
+    lock: Option<&CarrierLock>,
+) -> Result<HashMap<String, (Version, String)>> {
+    let (_, globally_resolved) = resolve_all(packages, lock)?;
+    Ok(globally_resolved)
+}
+
+/// Install a set of resolved R packages into `lib_path`, resolving first
+/// via `resolve_all`.
+///
+/// Returns the full resolved set (direct and transitive) so a caller can
+/// write it out as a new `carrier.lock`, minus anything that resolved
+/// successfully but then failed to actually download/install as a
+/// transitive dep (skipped with a warning below): a lock entry for a
+/// package that isn't actually there would be worse than no entry.
+pub fn install_packages(
+    packages: &BTreeMap<String, ResolvedPackage>,
+    lib_path: &Path,
+    lock: Option<&CarrierLock>,
+) -> Result<HashMap<String, (Version, String)>> {
+    let (per_repo, mut globally_resolved) = resolve_all(packages, lock)?;
+
+    std::fs::create_dir_all(lib_path)
+        .with_context(|| format!("Failed to create R lib dir: {}", lib_path.display()))?;
+
+    for (repo, RepoResolution { index, to_install }) in &per_repo {
+        let order = topo_order(to_install, index);
 
         for pkg in &order {
             let resolved = &to_install[pkg];
@@ -91,7 +176,6 @@ pub fn install_packages(
                     Ok(installed_version) => {
                         if installed_version == resolved.version {
                             println!("  [ok] {} {} (already satisfied)", pkg, installed_version);
-                            globally_resolved.insert(pkg.clone(), (resolved.version.clone(), repo.clone()));
                             continue;
                         }
                         println!("  [switching] {} {} → {}...", pkg, installed_version, resolved.version);
@@ -107,21 +191,21 @@ pub fn install_packages(
             match download_and_unpack(pkg, &resolved.version.to_string(), repo, lib_path) {
                 Ok(()) => {
                     println!("  [done] {} {}", pkg, resolved.version);
-                    globally_resolved.insert(pkg.clone(), (resolved.version.clone(), repo.clone()));
                 }
                 Err(e) => {
-                    let is_direct = pkgs.contains_key(pkg.as_str());
+                    let is_direct = packages.contains_key(pkg.as_str());
                     if is_direct {
                         return Err(e.context(format!("Failed to install {}", pkg)));
                     } else {
                         eprintln!("  [warn] skipping transitive dep {} — {}", pkg, e);
+                        globally_resolved.remove(pkg);
                     }
                 }
             }
         }
     }
 
-    Ok(())
+    Ok(globally_resolved)
 }
 
 /// Walk the dep graph breadth-first, validating version specs against the
@@ -174,8 +258,8 @@ fn resolve_install_set(
         let record = &index[pkg];
         let pkg_specs = specs.get(pkg);
 
-        // Already resolved by an earlier repo group in this same run —
-        // don't re-resolve independently. Verify it still satisfies what
+        // Already resolved by an earlier repo group in this same run (don't 
+        // re-resolve independently). Verify it still satisfies what
         // THIS repo's graph requires; reuse it if so, fail loudly if not.
         if let Some((existing_version, existing_repo)) = globally_resolved.get(pkg) {
             if let Some(pkg_specs) = pkg_specs {
@@ -353,7 +437,7 @@ fn binary_url_for(pkg: &str, version: &str, repo_url: &str, platform: &crate::pa
             base, platform.r_version_short, pkg, version
         )),
         RPlatformOs::MacOs => {
-            // CRAN split macOS binaries by CPU architecture years ago —
+            // CRAN split macOS binaries by CPU architecture years ago.
             // bin/macosx/contrib (no arch) is a legacy path that some
             // mirrors still serve, populated with x86_64-only builds. Using
             // it unconditionally installs an Intel binary on an Apple

@@ -13,9 +13,9 @@ pub struct ResolvedPackage {
 }
 
 pub struct ResolvedPlan {
-    /// package name → resolved package (spec + repo)
+    /// package name => resolved package (spec + repo)
     pub packages: BTreeMap<String, ResolvedPackage>,
-    /// module name → version spec
+    /// module name => version spec
     pub modules: BTreeMap<String, String>,
 }
 
@@ -35,7 +35,8 @@ pub fn resolve(
     for (name, dep) in package_deps.as_ref().unwrap_or(&BTreeMap::new()) {
         let spec = VersionSpec::parse(dep.version())?;
         pkg_specs.entry(name.clone()).or_default().push(spec);
-        // Last writer wins for repo — fine since duplicate deps are unusual
+        // Last writer wins for repo 
+        // Fine since duplicate deps are unusual
         pkg_repos.insert(name.clone(), dep.repo().to_owned());
     }
 
@@ -49,7 +50,7 @@ pub fn resolve(
 
     let mut packages = BTreeMap::new();
     for (name, specs) in pkg_specs {
-        // Only one spec per name is possible today — package_deps is a
+        // Only one spec per name is possible today. `package_deps` is a
         // BTreeMap, so a duplicate key already collapses upstream during
         // TOML parsing. This stays a hard error rather than a silent
         // pick-the-first once transitive module resolution (the TODO
@@ -113,7 +114,33 @@ pub fn already_installed_module(name: &str) -> Result<bool> {
     Ok(install_dir.join(name).is_dir())
 }
 
-pub fn execute_plan(plan: &ResolvedPlan, dry_run: bool) -> Result<()> {
+/// Resolve a plan's R packages to exact versions and repos without
+/// installing anything — what `carrier lock` calls. Module deps aren't
+/// included: there's no automatic resolve+install path for them yet
+/// (see the TODO in `resolve()` above), so there's nothing concrete to
+/// pin for a module the same way there is for a package.
+pub fn resolve_only(
+    plan: &ResolvedPlan,
+    lock: Option<&crate::lockfile::CarrierLock>,
+) -> Result<std::collections::HashMap<String, (semver::Version, String)>> {
+    if plan.packages.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    crate::cran::client::resolve_packages(&plan.packages, lock)
+}
+
+/// Runs the plan. On a real (non-dry-run) install, returns everything
+/// that was resolved for R packages (direct and transitive) so the
+/// caller can write it out as a fresh `carrier.lock` if asked to. A
+/// dry run or a plan with no packages returns an empty map; there is
+/// nothing yet to lock.
+pub fn execute_plan(
+    plan: &ResolvedPlan,
+    dry_run: bool,
+    lock: Option<&crate::lockfile::CarrierLock>,
+) -> Result<std::collections::HashMap<String, (semver::Version, String)>> {
+    let mut resolved = std::collections::HashMap::new();
+
     if !plan.packages.is_empty() {
         if dry_run {
             println!("  Would install R packages (pass --install-deps to proceed):");
@@ -123,7 +150,7 @@ pub fn execute_plan(plan: &ResolvedPlan, dry_run: bool) -> Result<()> {
         } else {
             let r_lib = resolve_r_lib_dir()?;
             println!("  Installing R packages into {}...", r_lib.display());
-            crate::cran::client::install_packages(&plan.packages, &r_lib)?;
+            resolved = crate::cran::client::install_packages(&plan.packages, &r_lib, lock)?;
         }
     }
 
@@ -138,5 +165,5 @@ pub fn execute_plan(plan: &ResolvedPlan, dry_run: bool) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(resolved)
 }
