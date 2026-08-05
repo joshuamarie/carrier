@@ -11,7 +11,7 @@ use crate::carrier_toml::PackageDep;
 /// Bundle a module into a `.tar.gz` archive.
 ///
 /// Archive structure:
-/// ```
+/// ``` text
 /// tstk_0.1.0/
 /// └── tstk/
 ///     ├── __init__.R
@@ -73,7 +73,7 @@ pub fn bundle(
 /// Unpack a `.tar.gz` carrier archive into the install directory.
 ///
 /// Strips the top-level `{name}_{version}/` prefix so the result is:
-/// ```
+/// ``` text
 /// <install_dir>/tstk/
 ///     __init__.R
 ///     decomp/

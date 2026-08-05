@@ -12,7 +12,7 @@ const MANIFEST_FILENAME: &str = "manifest.json";
 /// Bundle a module into a `.rmbx` archive.
 ///
 /// Archive structure:
-/// ```
+/// ``` text
 /// manifest.json
 /// tstk/
 ///     __init__.R
@@ -72,7 +72,7 @@ pub fn bundle(
 /// Unpack a `.rmbx` archive into the install directory.
 ///
 /// Result:
-/// ```
+/// ``` text
 /// <install_dir>/tstk/
 ///     __init__.R
 ///     ...
