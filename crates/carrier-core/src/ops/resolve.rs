@@ -61,6 +61,14 @@ pub fn resolve(
             [] => "*".to_owned(),
             [only] => format!("{only}"),
             multiple => {
+                // NOTE: this branch can't be exercised by a test today. 
+                // `package_deps` is a BTreeMap, so a duplicate name can
+                // never actually reach `pkg_specs` with more than one
+                // entry. It only matters once transitive module
+                // resolution (the TODO above) can push a second spec for
+                // the same package. Add a real test for it the same day
+                // that lands (don't let this gap outlive the reason
+                // for it).
                 let constraints: Vec<String> = multiple.iter().map(|s| s.to_string()).collect();
                 bail!(
                     "'{name}' has {} conflicting version constraints ({}) — \
