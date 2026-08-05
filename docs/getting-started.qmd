@@ -103,14 +103,6 @@ carrier lock . --update
 
 `--update` ignores any existing lock and re-resolves everything fresh — use it when you want to deliberately pick up newer versions rather than stay pinned.
 
-You can also write the lock as part of installing from a local directory, with `--write-lock`:
-
-``` bash
-carrier install . --install-deps --write-lock
-```
-
-A project with no `[package_deps]` resolves to nothing to pin, so `--write-lock` is a no-op in that case — no `carrier.lock` is written.
-
 Once a lock exists, later installs use it automatically: any package the lock pins installs at that exact version instead of being re-resolved, while anything not in the lock (e.g. a dependency you just added) still resolves fresh.
 
 ## 6. Use it from R

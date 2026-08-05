@@ -1,0 +1,64 @@
+---
+title: "carrier.lock"
+---
+
+`carrier.lock` is a lockfile (like `Cargo.lock` or `poetry.toml` from Python) pins the exact R package versions (and repos) that `carrier` resolved the last time you ran `carrier lock`. Commit it next to `carrier.toml` so later installs, either by you or by anyone else, will reuse those pins instead of re-resolving against CRAN.
+
+Only R packages, under `[package_deps]`, are locked on the current version of `carrier`. Module dependencies (`[module_deps]`) have no automatic resolve-and-install path as of now, so there is nothing concrete to pin for them.
+
+## Format
+
+The file is TOML. Format version is currently `1`:
+
+``` toml
+version = 1
+
+[[package]]
+name = "dplyr"
+version = "1.2.0"
+repo = "https://cloud.r-project.org"
+
+[[package]]
+name = "rlang"
+version = "1.3.0"
+repo = "https://cloud.r-project.org"
+```
+
+| Field | Meaning |
+|-------|---------|
+| `version` | Lock *format* version (not a package version). Defaults to `1` if omitted when reading. |
+| `[[package]]` | One entry per pinned R package. Entries are written sorted by `name` so the file stays stable and diffable. |
+| `name` | Package name as it appears on the repo. |
+| `version` | Exact semver string carrier resolved (e.g. `"1.2.2"`). |
+| `repo` | Repo URL used for that resolution (default CRAN mirror, or an explicit repo from `[package_deps]`). |
+
+## Writing the lock
+
+``` bash
+carrier lock .
+```
+
+Carrier reads `carrier.toml`, resolves `[package_deps]` (honoring any existing lock unless you pass `--update`), and writes `carrier.lock` next to `carrier.toml`.
+
+``` bash
+carrier lock . --update
+```
+
+`--update` discards the existing lock and re-resolves everything from scratch — use it when you intentionally want newer upstream versions.
+
+A project with no `[package_deps]` resolves to an empty set; the lock is still written, but with no `[[package]]` entries.
+
+## How installs use the lock
+
+When `carrier.lock` is present in the project root:
+
+- Any package listed in the lock is installed at that **exact** version and repo.
+- Packages not in the lock (for example a dependency you just added to `carrier.toml`) are still resolved fresh.
+
+Absence of the file is not an error: carrier simply resolves the way it always has. A present but unreadable or malformed lock **is** an error — a lock the tool cannot trust is worse than no lock at all.
+
+## Design notes
+
+1.  Packages are sorted by name on write so routine re-locks do not produce noisy diffs when the resolved graph is unchanged.
+2.  An invalid version string inside a lock entry fails hard on lookup rather than falling through to a fresh resolve.
+3.  The lock format version field exists so future schema changes can be detected and handled without silently misreading old locks.

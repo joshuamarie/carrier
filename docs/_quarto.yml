@@ -23,6 +23,8 @@ website:
                     text: CLI Commands
                   - href: reference/carrier-toml.qmd
                     text: carrier.toml
+                  - href: reference/carrier-lock.qmd
+                    text: carrier.lock
                   - href: reference/module-structure.qmd
                     text: Module Structure
             - text: Internals
@@ -43,6 +45,7 @@ website:
           contents:
               - reference/cli.qmd
               - reference/carrier-toml.qmd
+              - reference/carrier-lock.qmd
               - reference/module-structure.qmd
         - title: Internals
           contents:
