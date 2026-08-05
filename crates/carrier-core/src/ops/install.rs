@@ -13,7 +13,7 @@ enum InstallSource {
     Rmbx(PathBuf),
     Tar(PathBuf),
     Dir(PathBuf),
-    GitHub { user: String, repo: String, subpath: Option<String> },
+    GitHub { user: String, repo: String, git_ref: Option<String>, subpath: Option<String> },
     Registry { name: String, repo: String },
 }
 
@@ -22,8 +22,8 @@ pub fn run(source: &str, install_deps: bool, repo: Option<&str>) -> Result<()> {
         InstallSource::Rmbx(path) => install_from_rmbx(&path, install_deps),
         InstallSource::Tar(path) => install_from_tar(&path, install_deps),
         InstallSource::Dir(path) => install_from_dir(&path, install_deps),
-        InstallSource::GitHub { user, repo, subpath } => {
-            install_from_github(&user, &repo, subpath.as_deref(), install_deps)
+        InstallSource::GitHub { user, repo, git_ref, subpath } => {
+            install_from_github(&user, &repo, git_ref.as_deref(), subpath.as_deref(), install_deps)
         }
         InstallSource::Registry { name, repo } => install_from_registry(&name, &repo, install_deps),
     }
@@ -32,6 +32,7 @@ pub fn run(source: &str, install_deps: bool, repo: Option<&str>) -> Result<()> {
 struct GitHubSource {
     user: String,
     repo: String,
+    git_ref: Option<String>,
     subpath: Option<String>,
 }
 
@@ -45,19 +46,22 @@ fn parse_github_source(rest: &str) -> Result<GitHubSource> {
     let repo_and_rest: Vec<&str> = remainder.splitn(2, '/').collect();
     let repo = repo_and_rest[0].to_owned();
 
-    let subpath = if repo_and_rest.len() == 2 {
+    let (git_ref, subpath) = if repo_and_rest.len() == 2 {
         let after_repo = repo_and_rest[1];
-        let subpath = if let Some(s) = after_repo.strip_prefix("tree/") {
-            s.splitn(2, '/').nth(1).unwrap_or("").to_owned()
+        if let Some(rest) = after_repo.strip_prefix("tree/") {
+            let mut segments = rest.splitn(2, '/');
+            let git_ref = segments.next().filter(|s| !s.is_empty()).map(str::to_owned);
+            let subpath = segments.next().filter(|s| !s.is_empty()).map(str::to_owned);
+            (git_ref, subpath)
         } else {
-            after_repo.to_owned()
-        };
-        if subpath.is_empty() { None } else { Some(subpath) }
+            let subpath = if after_repo.is_empty() { None } else { Some(after_repo.to_owned()) };
+            (None, subpath)
+        }
     } else {
-        None
+        (None, None)
     };
 
-    Ok(GitHubSource { user, repo, subpath })
+    Ok(GitHubSource { user, repo, git_ref, subpath })
 }
 
 /// Mirrors pip's `_looks_like_path` heuristic: judged purely by the
@@ -82,6 +86,7 @@ fn parse_source(s: &str, repo: Option<&str>) -> Result<InstallSource> {
         return Ok(InstallSource::GitHub {
             user: gh.user,
             repo: gh.repo,
+            git_ref: gh.git_ref,
             subpath: gh.subpath,
         });
     }
@@ -240,9 +245,15 @@ fn install_from_dir(project_root: &PathBuf, install_deps: bool) -> Result<()> {
 }
 
 #[cfg(feature = "network")]
-fn install_from_github(user: &str, repo: &str, subpath: Option<&str>, install_deps: bool) -> Result<()> {
-    let url = format!("https://api.github.com/repos/{}/{}/tarball", user, repo);
-    println!("Fetching {}/{}...", user, repo);
+fn install_from_github(user: &str, repo: &str, git_ref: Option<&str>, subpath: Option<&str>, install_deps: bool) -> Result<()> {
+    let url = match git_ref {
+        Some(git_ref) => format!("https://api.github.com/repos/{}/{}/tarball/{}", user, repo, git_ref),
+        None => format!("https://api.github.com/repos/{}/{}/tarball", user, repo),
+    };
+    match git_ref {
+        Some(git_ref) => println!("Fetching {}/{}@{}...", user, repo, git_ref),
+        None => println!("Fetching {}/{} (default branch)...", user, repo),
+    }
 
     let tmp = TempDir::new().context("Failed to create temp directory")?;
     let tarball_path = tmp.path().join("repo.tar.gz");
@@ -288,7 +299,7 @@ fn install_from_github(user: &str, repo: &str, subpath: Option<&str>, install_de
 }
 
 #[cfg(not(feature = "network"))]
-fn install_from_github(_user: &str, _repo: &str, _subpath: Option<&str>, _install_deps: bool) -> Result<()> {
+fn install_from_github(_user: &str, _repo: &str, _git_ref: Option<&str>, _subpath: Option<&str>, _install_deps: bool) -> Result<()> {
     bail!(
         "GitHub install requires the 'network' feature.\n\
          Rebuild with: cargo build --features network"
