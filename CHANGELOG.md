@@ -2,6 +2,14 @@
 
 # Development version
 
+-   Add `--repo` support on `carrier install` for the future updates. 
+
+-   A lockfile support on `carrier`. 
+
+-   New lockfile module: read/write `carrier.lock`, pinning each package to an exact version and repo.
+
+    -  Either run `carrier lock .` to write the lockfile or run `carrier install . --write-lock` instead. 
+
 # 0.1.0
 
 -   This is the initial version release of `carrier`
