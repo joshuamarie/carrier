@@ -7,6 +7,7 @@ use commands::{
     bundle::BundleArgs,
     init::InitArgs,
     install::InstallArgs,
+    lock::LockArgs,
     remove::RemoveArgs,
 };
 
@@ -52,6 +53,20 @@ enum Commands {
         install_deps: bool,
         #[arg(long, help = "Registry URL to install SOURCE from (registries aren't implemented yet)")]
         repo: Option<String>,
+        #[arg(long, help = "Write carrier.lock after resolving R package dependencies (only applies when installing from a local directory)")]
+        write_lock: bool,
+    },
+
+    /// Resolve R package dependencies and write carrier.lock, without
+    /// installing anything
+    Lock {
+        /// Path to the project root (e.g. `.` or `./my-project`)
+        path: String,
+
+        /// Ignore any existing carrier.lock and re-resolve everything
+        /// fresh instead of reusing its pins
+        #[arg(long)]
+        update: bool,
     },
 
     /// Remove an installed module
@@ -75,8 +90,11 @@ fn main() {
         Commands::Bundle { path, rmbx } => {
             commands::bundle::run(BundleArgs { path, rmbx })
         }
-        Commands::Install { source, install_deps, repo } => {
-            commands::install::run(InstallArgs { source, install_deps, repo })
+        Commands::Install { source, install_deps, repo, write_lock } => {
+            commands::install::run(InstallArgs { source, install_deps, repo, write_lock })
+        }
+        Commands::Lock { path, update } => {
+            commands::lock::run(LockArgs { path, update })
         }
         Commands::Remove { name, force } => {
             commands::remove::exec(RemoveArgs { name, force })
