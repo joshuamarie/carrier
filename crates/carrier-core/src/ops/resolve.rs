@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use anyhow::{bail, Result};
 
-use crate::carrier_toml::{PackageDep, DEFAULT_CRAN_MIRROR};
+use crate::carrier_toml::{ModuleDep, PackageDep, DEFAULT_CRAN_MIRROR};
 use crate::version::VersionSpec;
 use crate::paths::{resolve_install_dir, resolve_r_lib_dir};
 
@@ -26,7 +26,7 @@ pub struct ResolvedPlan {
 /// STUB: transitive module resolution is not yet implemented.
 pub fn resolve(
     package_deps: &Option<BTreeMap<String, PackageDep>>,
-    module_deps: &Option<BTreeMap<String, String>>,
+    module_deps: &Option<BTreeMap<String, ModuleDep>>,
 ) -> Result<ResolvedPlan> {
     let mut pkg_specs: BTreeMap<String, Vec<VersionSpec>> = BTreeMap::new();
     let mut pkg_repos: BTreeMap<String, String> = BTreeMap::new();
@@ -40,12 +40,14 @@ pub fn resolve(
         pkg_repos.insert(name.clone(), dep.repo().to_owned());
     }
 
-    for (name, spec_str) in module_deps.as_ref().unwrap_or(&BTreeMap::new()) {
-        let spec = VersionSpec::parse(spec_str)?;
+    for (name, dep) in module_deps.as_ref().unwrap_or(&BTreeMap::new()) {
+        let spec = VersionSpec::parse(dep.version())?;
         mod_specs.entry(name.clone()).or_default().push(spec);
 
-        // TODO: load the installed module's carrier.toml and push its
-        // deps onto the queue for transitive resolution.
+        // TODO: dep.source() is parsed but not yet used. Once transitive
+        // module resolution exists, fetch the source's carrier.toml,
+        // read its declared module.version, check it against `spec`,
+        // and push its own deps onto the queue.
     }
 
     let mut packages = BTreeMap::new();
