@@ -181,7 +181,8 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
 /// `execute_plan` produced, so a caller installing from a local
 /// directory can write it out as `carrier.lock` when `--write-lock` is
 /// passed. A dry run or a plan with no packages yields an empty map.
-fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<HashMap<String, (Version, String)>> {
+// fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<HashMap<String, (Version, String)>>;
+fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<()> {
     if !tar_path.exists() {
         bail!("File not found: {}", tar_path.display());
     }
