@@ -8,7 +8,7 @@
 
 -   New lockfile module: read/write `carrier.lock`, pinning each package to an exact version and repo.
 
-    -  Either run `carrier lock .` to write the lockfile or run `carrier install . --write-lock` instead. 
+    -  Run `carrier lock .` to produce the `carrier.lock` lockfile. 
 
 # 0.1.0
 
