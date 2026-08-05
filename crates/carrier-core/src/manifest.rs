@@ -26,13 +26,23 @@ pub struct PackageDepEntry {
     pub repo: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ModuleDepEntry {
+    pub name: String,
+    pub version: String,
+    /// Unlike `PackageDepEntry.repo`, `None` here is not a default —
+    /// there is no default module registry. `None` means the source
+    /// carrier.toml declared none, which resolution treats as an error.
+    pub source: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Dependencies {
     /// Every 'box' modules uses R packages
     /// Write R package deps through e.g. ["dplyr", "stringr"])
     pub packages: Vec<PackageDepEntry>,
     /// Then other carrier modules required (e.g. ["utils/helpers"])
-    pub modules: Vec<(String, String)>,
+    pub modules: Vec<ModuleDepEntry>,
 }
 
 impl Manifest {
