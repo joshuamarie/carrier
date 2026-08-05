@@ -90,16 +90,12 @@ If you know the structure of Python packages, this feels familiar to you.
     carrier bundle .
     ```
 
-3.  Either install the module after bundling it:
+3.  Install from an archive, a local project directory, or GitHub:
 
     ``` bash
-    carrier install <name-of-the-module>.tar.gz
-    ```
-    
-    or install the module from a GitHub repo:
-
-    ``` bash
-    carrier install gh:username/<path-of-the-module>
+    carrier install <name-of-the-module>_0.1.0.tar.gz
+    carrier install .
+    carrier install gh:username/repo
     ```
     
     <!-- By default, it installs the module, locally, but you can install the module globally: -->
@@ -112,6 +108,12 @@ If you know the structure of Python packages, this feels familiar to you.
 
     ``` bash
     carrier remove <name-of-the-module>
+    ```
+
+5.  Optionally pin those R package versions so later installs reproduce them:
+
+    ``` bash
+    carrier lock .
     ```
 
 ## Using installed modules
