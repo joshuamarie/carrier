@@ -12,6 +12,7 @@ pub struct ResolvedPackage {
     pub repo: String,
 }
 
+#[derive(Debug)]
 pub struct ResolvedPlan {
     /// package name => resolved package (spec + repo)
     pub packages: BTreeMap<String, ResolvedPackage>,
