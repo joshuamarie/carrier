@@ -1,4 +1,5 @@
 /_site/
+/carrier_site/
 /.quarto/
 
 **/*.quarto_ipynb

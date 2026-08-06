@@ -2,7 +2,7 @@
 title: "Dependency Resolution"
 ---
 
-This page covers `cran::client::install_packages`. It specifically covers what actually runs when `carrier install --install-deps` resolves and installs R package dependencies.
+This page covers how `carrier` resolves dependencies: `cran::client::install_packages` for R package dependencies, and `ops::module_graph::resolve_transitive` for `carrier`-installed module dependencies. It specifically covers what actually runs when `carrier install --install-deps` resolves and installs R package dependencies, and what runs when a module's `module_deps` are walked transitively.
 
 ## Grouping and fetch
 
@@ -39,3 +39,30 @@ A failed install of a **directly requested** package aborts the whole run. A fai
 ## Archive extraction safety
 
 Both the `.zip` and `.tar.gz` binary-extraction paths sanitize every entry path before writing anything to disk: absolute paths and any `..` component are rejected outright, and on Unix, symlink targets are dropped if they're absolute or contain a parent-directory component. Extraction always lands in a temp staging directory first; only after `Meta/package.rds` is confirmed does the staged package get moved into the real library — via a rename, falling back to a recursive copy if staging and the library live on different filesystems.
+
+## Module dependency graph
+
+::: {.callout-caution title="Note for readers" icon=false}
+*This is for developers under development*
+:::
+
+`carrier`-installed modules (`module_deps` in `carrier.toml`) resolve through a separate path from R packages: `resolve_transitive` in `ops::module_graph`. It shares no code with the CRAN resolution above, no repo grouping, no binary/source install step, and no CRAN index, because a module dependency is fetched as a whole `carrier.toml` from its declared `source` (see [carrier.toml](../reference/carrier-toml.qmd#module_deps)), not resolved against a package index.
+
+### Why this walk is DFS, not BFS
+
+The graph is walked depth-first, It keeps an explicit ancestor path (the chain of module names from the root down to whatever's currently being resolved) — deliberately, not as an implementation detail. A "have I seen this module name before" set alone can't tell a real dependency cycle (A depends on B depends on A) apart from an ordinary diamond dependency (two modules both depending on the same third module) — both look identical as "this name showed up twice." Only ancestry, whether the name is still an open call on the current path, versus already finished and closed off, distinguishes them. A queue-based (BFS) walk has no notion of ancestry, only of what's been dequeued; only a call stack (or an explicit path "Vec" standing in for one) does.
+
+### Resolution steps, per module dependency
+
+1. If the module name is already fully resolved (from an earlier branch of the walk, a diamond), its resolved version and source are checked for consistency against the current dependent's constraint instead of being fetched again. A mismatched `source` or an incompatible version constraint fails loudly, which names both requesters.
+2. If the module name is already on the current ancestor path, that's a real cycle. The walk fails with the full chain (e.g. `a -> b -> a`) rather than looping.
+3. A `module_deps` entry with no `source` fails immediately (as of now), which there's no default module registry to fall back to (unlike `package_deps`, which defaults to CRAN).
+4. Otherwise, the dependency's `carrier.toml` is fetched from its `source`. Its declared `module.version` is checked against the requesting constraint, its own `package_deps` are folded into the same package-resolution set used everywhere else, and its own `module_deps` are recursed into.
+
+### What fetches a module
+
+`ModuleFetcher` is a small trait. `resolve_transitive()` only knows how to walk the graph, not how to fetch a `carrier.toml`. The production implementation, `GitHubFetcher`, understands `gh:user/repo` sources (optionally pinned via `gh:user/repo/tree/<ref>/<subpath>`, see [CLI Commands](cli.qmd#carrier-install)) and requires the `network` feature, same as `carrier install`'s own `gh:` handling.
+
+::: {.callout-note title="Technical Notes"}
+`resolve_transitive()` exists and is tested, but `carrier lock` doesn't call it (yet, as of now). The current `carrier lock` uses the shallow, single-level `resolve()`, which doesn't fetch anything for `module_deps`. Transitive module resolution isn't wired into any CLI command yet. 
+:::
