@@ -42,7 +42,7 @@ carrier install <source> [--install-deps]
 
 | Argument | Description |
 |---|---|
-| `<source>` | One of: a directory containing `carrier.toml`, a `.tar.gz` archive, or `gh:user/repo` (optionally `gh:user/repo/tree/branch/subpath`). |
+| `<source>` | One of: a directory containing `carrier.toml`, a `.tar.gz` archive, or `gh:user/repo` (optionally `gh:user/repo/tree/<ref>/<subpath>` to install a specific tag, branch, or commit, omitting `<ref>` installs the default branch). |
 | `--install-deps` | Actually install resolved R package dependencies from CRAN, rather than only printing the plan. |
 
 Any existing install of the same module name is replaced. The `[package_deps]` / `[module_deps]` in `carrier.toml` are resolved and printed regardless of `--install-deps`; without the flag, R packages are planned but not fetched.
