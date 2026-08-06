@@ -1,4 +1,4 @@
-use carrier_core::carrier_toml::{PackageDep, DEFAULT_CRAN_MIRROR};
+use carrier_core::carrier_toml::{ModuleDep, PackageDep, DEFAULT_CRAN_MIRROR};
 use carrier_core::ops::resolve::resolve;
 use std::collections::BTreeMap;
 
@@ -51,7 +51,7 @@ fn resolve_multiple_packages_are_all_present() {
 #[test]
 fn resolve_module_deps_are_marked_latest() {
     let mut mods = BTreeMap::new();
-    mods.insert("utils/helpers".to_owned(), "*".to_owned());
+    mods.insert("utils/helpers".to_owned(), ModuleDep::Simple("*".to_owned()));
 
     let plan = resolve(&None, &Some(mods)).unwrap();
     assert_eq!(plan.modules["utils/helpers"], "latest");
