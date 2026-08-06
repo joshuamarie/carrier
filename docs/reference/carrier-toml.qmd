@@ -58,7 +58,16 @@ R version strings that use dashes (e.g. `4.0-3`, as CRAN's `PACKAGES` index does
 
 ## `[module_deps]`
 
-Maps a `carrier`-installed module name to a version requirement string, using the same syntax as `[package_deps]`:
+Maps a `carrier`-installed module name to a version requirement, using the same syntax as `[package_deps]`. Unlike `[package_deps]`, there's no default registry to fall back to (as of now), a module dependency also needs a `source` telling `carrier` where to fetch it from:
+
+``` toml
+[module_deps]
+other_module = { version = "*", source = "gh:user/repo" }
+```
+
+`source` accepts the same syntax as `carrier install`'s `<source>` argument, currently `gh:user/repo`, optionally `gh:user/repo/tree/<ref>/<subpath>` to pin a tag, branch, or commit. See [CLI Commands](cli.qmd#carrier-install).
+
+The bare-string form is still accepted, but has no source and can't be resolved on its own:
 
 ``` toml
 [module_deps]
@@ -66,7 +75,7 @@ other_module = "*"
 ```
 
 ::: {.callout-note title="Technical Notes"}
-Version constraints here are not enforced yet. `carrier install` currently resolves every `module_deps` entry to `latest` regardless of what's written. That's because `module_deps` hasn't established its design, yet, as its possible monorepo (like CRAN) hasn't built, yet. Thus, treat this table as documentation of intent for now, not a version pin.
+A `module_deps` entry with no `source`, whether written as a bare string or as `{ version = "...", source = ... }` with `source` omitted, fails resolution with an explicit error rather than silently falling back to anything. There is no CRAN-equivalent default registry for modules, so there's nothing to fall back to.
 :::
 
 ## `[test]`
