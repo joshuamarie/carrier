@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use ::tar::Archive as TarArchive;
-use crate::carrier_toml::PackageDep;
+use crate::carrier_toml::{CarrierToml, PackageDep};
 use crate::formats::{rmbx, tar};
+use crate::ops::module_graph::ModuleFetcher;
 use crate::ops::resolve;
 use crate::paths::resolve_install_dir;
 
@@ -304,6 +305,64 @@ fn install_from_github(_user: &str, _repo: &str, _git_ref: Option<&str>, _subpat
         "GitHub install requires the 'network' feature.\n\
          Rebuild with: cargo build --features network"
     )
+}
+
+/// The real ModuleFetcher used by resolve_transitive() outside of tests.
+/// Only understands `gh:user/repo` sources today — anything else is a
+/// clear error rather than a silent no-op, since a resolver that
+/// pretends to resolve something it can't fetch is worse than one that
+/// says so plainly.
+#[cfg(feature = "network")]
+pub struct GitHubFetcher;
+
+#[cfg(feature = "network")]
+impl ModuleFetcher for GitHubFetcher {
+    fn fetch(&self, source: &str) -> Result<CarrierToml> {
+        let rest = source.strip_prefix("gh:").ok_or_else(|| {
+            anyhow::anyhow!("Unsupported module source '{source}' — only gh: sources can be fetched right now.")
+        })?;
+        let gh = parse_github_source(rest)?;
+
+        let url = match &gh.git_ref {
+            Some(git_ref) => format!("https://api.github.com/repos/{}/{}/tarball/{}", gh.user, gh.repo, git_ref),
+            None => format!("https://api.github.com/repos/{}/{}/tarball", gh.user, gh.repo),
+        };
+
+        let tmp = TempDir::new().context("Failed to create temp directory")?;
+        let tarball_path = tmp.path().join("repo.tar.gz");
+        download_file(&url, &tarball_path)
+            .with_context(|| format!("Failed to download module source '{source}'"))?;
+
+        let extract_dir = tmp.path().join("extracted");
+        std::fs::create_dir_all(&extract_dir)
+            .context("Failed to create extraction directory")?;
+        extract_tarball(&tarball_path, &extract_dir)
+            .context("Failed to extract tarball")?;
+
+        let extracted_root = find_single_subdir(&extract_dir)
+            .context("Could not find module directory in downloaded archive")?;
+
+        let project_root = match &gh.subpath {
+            Some(sub) => extracted_root.join(sub),
+            None => extracted_root,
+        };
+
+        CarrierToml::from_dir(&project_root)
+            .with_context(|| format!("Module source '{source}' does not contain a valid carrier.toml"))
+    }
+}
+
+#[cfg(not(feature = "network"))]
+pub struct GitHubFetcher;
+
+#[cfg(not(feature = "network"))]
+impl ModuleFetcher for GitHubFetcher {
+    fn fetch(&self, _source: &str) -> Result<CarrierToml> {
+        bail!(
+            "GitHub module fetching requires the 'network' feature.\n\
+             Rebuild with: cargo build --features network"
+        )
+    }
 }
 
 /// Not implemented yet — there's no module registry protocol defined.

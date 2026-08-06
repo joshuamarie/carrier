@@ -19,11 +19,11 @@ pub struct ResolvedPlan {
     pub modules: BTreeMap<String, String>,
 }
 
-/// Walk the dependency graph breadth-first, collecting all version specs
-/// for each package/module across the full graph, then resolve to one
-/// version per dep.
-///
-/// STUB: transitive module resolution is not yet implemented.
+/// Resolve only the root project's own package_deps/module_deps, one
+/// level deep — no fetching, no transitive walk. Used where a full
+/// dependency graph isn't needed (e.g. resolving the packages a
+/// just-unpacked module itself declares). For the full graph, see
+/// resolve_transitive().
 pub fn resolve(
     package_deps: &Option<BTreeMap<String, PackageDep>>,
     module_deps: &Option<BTreeMap<String, ModuleDep>>,
@@ -50,27 +50,30 @@ pub fn resolve(
         // and push its own deps onto the queue.
     }
 
+    let packages = resolve_packages_from_specs(pkg_specs, &pkg_repos)?;
+
+    let modules = mod_specs
+        .into_keys()
+        .map(|n| (n, "latest".to_owned()))
+        .collect();
+
+    Ok(ResolvedPlan { packages, modules })
+}
+
+/// Shared by resolve() and module_graph::resolve_transitive() — collapses
+/// each package's accumulated version specs down to one, erroring on any
+/// real conflict rather than silently picking one. pub(crate) so
+/// module_graph.rs can call it without duplicating the logic.
+pub(crate) fn resolve_packages_from_specs(
+    pkg_specs: BTreeMap<String, Vec<VersionSpec>>,
+    pkg_repos: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, ResolvedPackage>> {
     let mut packages = BTreeMap::new();
     for (name, specs) in pkg_specs {
-        // Only one spec per name is possible today. `package_deps` is a
-        // BTreeMap, so a duplicate key already collapses upstream during
-        // TOML parsing. This stays a hard error rather than a silent
-        // pick-the-first once transitive module resolution (the TODO
-        // above) starts pushing a second spec for the same package: a
-        // real conflict should surface here, not resolve to whichever
-        // constraint happened to arrive first.
         let version_spec = match specs.as_slice() {
             [] => "*".to_owned(),
             [only] => format!("{only}"),
             multiple => {
-                // NOTE: this branch can't be exercised by a test today. 
-                // `package_deps` is a BTreeMap, so a duplicate name can
-                // never actually reach `pkg_specs` with more than one
-                // entry. It only matters once transitive module
-                // resolution (the TODO above) can push a second spec for
-                // the same package. Add a real test for it the same day
-                // that lands (don't let this gap outlive the reason
-                // for it).
                 let constraints: Vec<String> = multiple.iter().map(|s| s.to_string()).collect();
                 bail!(
                     "'{name}' has {} conflicting version constraints ({}) — \
@@ -86,13 +89,7 @@ pub fn resolve(
             .unwrap_or_else(|| DEFAULT_CRAN_MIRROR.to_owned());
         packages.insert(name, ResolvedPackage { version_spec, repo });
     }
-
-    let modules = mod_specs
-        .into_keys()
-        .map(|n| (n, "latest".to_owned()))
-        .collect();
-
-    Ok(ResolvedPlan { packages, modules })
+    Ok(packages)
 }
 
 /// Pretty-print the resolved plan to stdout.
