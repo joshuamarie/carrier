@@ -22,6 +22,7 @@ dirs.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true
 semver.workspace = true
+carrier-native = { path = "../carrier-native" }
 
 [dev-dependencies]
 insta.workspace = true

@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 carrier-core = { path = "../carrier-core", features = ["network"] }
+carrier-native = { path = "../carrier-native" }
 anyhow.workspace = true
 clap.workspace = true
 
