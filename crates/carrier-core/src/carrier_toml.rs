@@ -124,6 +124,26 @@ impl ModuleDep {
     }
 }
 
+// ---- NativeConfig ----
+/// Declares where a module's compiled code lives, and its build-time-
+/// only R package deps (e.g. `Rcpp`), whose headers a `Makevars` needs
+/// to find via `system.file()` before `R CMD SHLIB` can run.
+///
+/// `path` is optional and exists purely as an override. When omitted,
+/// `resolve_native_dir()` falls back to `<module_src_dir>/src/` — the
+/// original convention — so whether a module HAS native code at all
+/// is still a filesystem fact for the common case, not something
+/// that requires a `[native]` block to discover, the same way
+/// `__init__.R`'s presence (not a TOML field) is what makes a
+/// directory a module. `path` is for the case that convention
+/// doesn't fit: compiled code living somewhere other than nested
+/// under the module's own source directory.
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct NativeConfig {
+    pub path: Option<String>,
+    pub build_deps: Option<BTreeMap<String, PackageDep>>,
+}
+
 // ---- CarrierToml (For metadata file) ----
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -131,6 +151,7 @@ pub struct CarrierToml {
     pub module: ModuleMeta,
     pub package_deps: Option<BTreeMap<String, PackageDep>>,
     pub module_deps: Option<BTreeMap<String, ModuleDep>>,
+    pub native: Option<NativeConfig>,
     pub test: Option<TestConfig>,
 }
 
@@ -234,6 +255,35 @@ impl CarrierToml {
         Ok(dir)
     }
 
+    /// Resolve the directory containing this module's compiled code,
+    /// independent of `resolve_src_dir()`. A module's R source (`src`
+    /// in `[module]`) and its native code (`path` in `[native]`) are
+    /// unrelated locations — neither is derived from the other. A
+    /// module could have `src = "R/"` and `[native] path = "cpp/"`
+    /// with no naming relationship between them at all.
+    ///
+    /// Falls back to `<module_src_dir>/src/` when `[native].path` is
+    /// omitted — see `NativeConfig`'s doc comment for why that default
+    /// exists and what it preserves.
+    pub fn resolve_native_dir(&self, project_root: &Path) -> Result<PathBuf> {
+        match self.native.as_ref().and_then(|n| n.path.as_deref()) {
+            Some(path) => Ok(project_root.join(path)),
+            None => Ok(self.resolve_src_dir(project_root)?.join("src")),
+        }
+    }
+
+    /// Whether this module has compiled code that needs building via
+    /// `R CMD SHLIB` before it can be loaded. Purely a filesystem
+    /// check against whatever `resolve_native_dir()` resolves to — a
+    /// `Makevars` or `Makevars.win` there is what makes a module
+    /// "native," not `[native]`'s presence in the TOML (an author can
+    /// still use `[native]` for `build_deps` alone without implying
+    /// compiled code exists).
+    pub fn has_native_code(&self, project_root: &Path) -> Result<bool> {
+        let native_dir = self.resolve_native_dir(project_root)?;
+        Ok(native_dir.join("Makevars").exists() || native_dir.join("Makevars.win").exists())
+    }
+
     pub fn default_template(name: &str) -> String {
         format!(
             r#"[module]
@@ -255,6 +305,17 @@ r_version = "4.0.0"
 
 [module_deps]
 # other_module = "*"
+
+[native]
+# Only needed if native code doesn't live in the default location
+# (src/ under this module's source dir), or if src/Makevars
+# references headers from another R package (e.g. Rcpp).
+# path = "native/"            # override — defaults to src/ if omitted
+# build_deps = {{ Rcpp = "*" }}
+                    # resolved and installed before compiling —
+                    # does not imply a runtime dependency; list in
+                    # [package_deps] too if the compiled code also
+                    # needs it loaded at runtime
 
 [test]
 framework = "testthat"
