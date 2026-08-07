@@ -14,6 +14,8 @@ pub struct Manifest {
     pub license: String,
     pub r_version: String,
     pub dependencies: Dependencies,
+    #[serde(default)]
+    pub native: Option<NativeManifest>,
     pub files: Vec<String>,
     pub bundled_at: String,
 }
@@ -45,6 +47,33 @@ pub struct Dependencies {
     pub modules: Vec<ModuleDepEntry>,
 }
 
+/// Present only when the bundled module has compiled code (mirrors
+/// `carrier_toml::NativeConfig`, plus a source hash computed at bundle
+/// time). Carries the module's build-time deps forward into the
+/// archive so `carrier install` can resolve+install them on the
+/// installing machine before compiling. The same reason `Dependencies`
+/// gets embedded here instead of re-read from a `carrier.toml` that
+/// may not travel with every install path (e.g. `.rmbx`).
+///
+/// v1 has no `artifacts` list: carrier always compiles from source on
+/// install rather than shipping prebuilt per-platform binaries inside
+/// the archive. Distributing prebuilts is a registry-level concern
+/// that doesn't exist yet (see `install_from_registry`'s stub) — this
+/// field only needs to grow once that does.
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct NativeManifest {
+    pub build_deps: Vec<PackageDepEntry>,
+    /// Hash of the module's native-code directory contents at bundle
+    /// time (whatever `CarrierToml::resolve_native_dir()` resolved to
+    /// — see `carrier_native::source_hash`). This is informational for
+    /// now (lets an installer log "source changed since this was
+    /// published"); the installing machine always recomputes its own
+    /// hash for cache lookups rather than trusting this one, since
+    /// it's describing the bundler's directory, not necessarily
+    /// byte-identical to what ends up on disk after unpacking.
+    pub source_hash: String,
+}
+
 impl Manifest {
     pub fn new(
         name: impl Into<String>,
@@ -64,9 +93,19 @@ impl Manifest {
             license: license.into(),
             r_version: r_version.into(),
             dependencies,
+            native: None,
             files,
             bundled_at: Utc::now().to_rfc3339(),
         }
+    }
+
+    /// Attaches native build info to a manifest already built via
+    /// `new()`. Kept as a separate fluent setter rather than an
+    /// argument on `new()` so existing call sites for non-native
+    /// modules (the overwhelming majority) don't all need updating.
+    pub fn with_native(mut self, native: NativeManifest) -> Self {
+        self.native = Some(native);
+        self
     }
 
     pub fn to_json(&self) -> anyhow::Result<String> {
