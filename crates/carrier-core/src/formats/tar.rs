@@ -153,6 +153,25 @@ pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
                 .context("Failed to parse manifest.json from archive")?;
             // Reconstruct a minimal CarrierToml from the manifest
             return Ok(crate::carrier_toml::CarrierToml {
+                native: manifest.native.map(|n| crate::carrier_toml::NativeConfig {
+                    path: None,
+                    build_deps: if n.build_deps.is_empty() {
+                        None
+                    } else {
+                        Some(
+                            n.build_deps
+                                .into_iter()
+                                .map(|entry| {
+                                    let dep = match entry.repo {
+                                        Some(repo) => PackageDep::Extended { version: entry.version, repo: Some(repo) },
+                                        None => PackageDep::Simple(entry.version),
+                                    };
+                                    (entry.name, dep)
+                                })
+                                .collect()
+                        )
+                    },
+                }),
                 module: crate::carrier_toml::ModuleMeta {
                     name: manifest.name,
                     version: manifest.version,
