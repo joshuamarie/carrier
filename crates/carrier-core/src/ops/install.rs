@@ -68,7 +68,7 @@ fn parse_github_source(rest: &str) -> Result<GitHubSource> {
 /// Mirrors pip's `_looks_like_path` heuristic: judged purely by the
 /// string's *appearance*, never by touching the filesystem. A bare word
 /// with no separator and no leading `.` is never treated as local, so it
-/// stays available for a module registry to claim later — installing a
+/// stays available for a module registry to claim later. Installing a
 /// local directory always requires an explicit `./name`, `../name`, or
 /// absolute path, the same way `pip install pkg` never silently matches
 /// a same-named local folder.
@@ -180,6 +180,8 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
     resolve::print_plan(&plan);
     resolve::execute_plan(&plan, !install_deps, None)?;
 
+    build_native_if_present(&module_path, &name, install_deps)?;
+
     Ok(())
 }
 
@@ -224,6 +226,8 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<()> {
     println!("Dependencies:");
     resolve::print_plan(&plan);
     resolve::execute_plan(&plan, !install_deps, None)?;
+
+    build_native_if_present(&module_path, &name, install_deps)?;
 
     Ok(())
 }
@@ -374,6 +378,58 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
         "Module registries aren't implemented yet — wanted to install '{name}' from '{repo}'.\n\
          For now, install directly: a local path, or gh:user/repo."
     )
+}
+
+/// Compiles a module's native code, if it has any, right after
+/// unpacking. `module_path` is the module's own flat installed
+/// directory (`<install_dir>/<name>`). Native code, when present,
+/// always lands at `<module_path>/src/`, since bundling only ever
+/// walks a module's own source directory (see `tar::bundle`), so a
+/// `[native].path` override outside that directory wouldn't survive
+/// bundling to begin with. That's also why this doesn't reuse
+/// `resolve_native_dir()`: that function resolves an override from a
+/// project root, a concept that no longer exists once a module has
+/// been unpacked flat into its install directory.
+///
+/// Detection is purely filesystem-based (`has_native_src`), not keyed
+/// off the manifest's `native` field, matching the same "presence of
+/// a file, not a TOML flag" philosophy `NativeConfig` was built on.
+///
+/// Gated behind `install_deps` rather than a dedicated flag: a
+/// module's `[native].build_deps` (e.g. Rcpp) need to already be
+/// installed before `R CMD SHLIB` can find their headers, and
+/// `install_deps` is already what governs whether deps get installed
+/// at all. Worth revisiting if that coupling ever gets confusing.
+///
+/// Known gap: `[native].build_deps` aren't folded into package
+/// resolution anywhere yet. A build dep only actually gets installed
+/// today if it's ALSO listed under `[package_deps]` by convention.
+/// `NativeManifest.build_deps` currently exists as bundle-time
+/// metadata with no consuming code path.
+fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool) -> Result<()> {
+    let native_dir = module_path.join("src");
+    if !carrier_native::has_native_src(&native_dir) {
+        return Ok(());
+    }
+
+    if !install_deps {
+        println!(
+            "  [native] {} has compiled code — build with: carrier install --install-deps",
+            name
+        );
+        return Ok(());
+    }
+
+    println!("Building native code for '{}'...", name);
+    let outcome = carrier_native::build(module_path, &native_dir, name)
+        .with_context(|| format!("Failed to build native code for '{}'", name))?;
+    println!(
+        "  built: {} ({})",
+        outcome.artifact_path.display(),
+        if outcome.from_cache { "cached" } else { "compiled" }
+    );
+
+    Ok(())
 }
 
 #[cfg(feature = "network")]
