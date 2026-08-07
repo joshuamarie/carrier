@@ -14,7 +14,7 @@ pub struct BuildOutcome {
     pub artifact_path: PathBuf,
     pub source_hash: String,
     /// `R.version$platform`, e.g. `x86_64-pc-linux-gnu`. Not a real
-    /// Rust target triple — R doesn't expose one directly — but it's
+    /// Rust target triple (R doesn't expose one directly) but it's
     /// exactly the granularity ABI compatibility actually depends on
     /// here, so it doubles as one for cache-keying purposes.
     pub target_triple: String,
@@ -25,14 +25,14 @@ pub struct BuildOutcome {
 /// Compile the sources under `native_dir` via `R CMD SHLIB`, mirroring
 /// the same conventions worked out by hand earlier:
 ///   - output named `<module_name><dynlib_ext>` (not derived from the
-///     source filenames — `R CMD SHLIB -o` requires an explicit name
+///     source filenames. `R CMD SHLIB -o` requires an explicit name
 ///     whenever there's more than one source file)
 ///   - moved from `native_dir` up to `module_dir` after compiling
 ///   - `.o` object files discarded afterward, not needed at runtime
 ///
 /// `native_dir` and `module_dir` are deliberately separate parameters.
-/// `native_dir` is wherever the module's `[native].path` resolves to —
-/// this function has no opinion on what that directory is called or
+/// `native_dir` is wherever the module's `[native].path` resolves to.
+/// This function has no opinion on what that directory is called or
 /// where it sits relative to the module root. The compiled artifact's
 /// destination is always `module_dir` regardless, since that's where
 /// `box::file()` looks.
@@ -121,11 +121,15 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str) -> Result<
     })?;
 
     // .o files can land in nested subdirectories now that
-    // native_sources() walks recursively — cleaned up the same way
+    // `native_sources()` walks recursively, cleaned up the same way
     // it walks, not with a flat read_dir, or nested .o files are
-    // left behind.
+    // left behind. target/ excluded for the same reason as
+    // `source_hash()`/`native_sources()`. No reason to recurse into
+    // Cargo's own build output looking for stray .o files that
+    // wouldn't be there anyway.
     for entry in walkdir::WalkDir::new(native_dir)
         .into_iter()
+        .filter_entry(|e| e.file_name().to_str() != Some("target"))
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| e.path().extension().and_then(|ext| ext.to_str()) == Some("o"))
@@ -153,14 +157,20 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str) -> Result<
     })
 }
 
-/// Sources under `native_dir`, recursively — matching source_hash()'s
+/// Sources under `native_dir`, recursively. This matches `source_hash()`'s
 /// own recursion exactly. These two walking the tree differently was
 /// a real bug: the cache key could change for a nested source file
 /// that R CMD SHLIB was never actually told to compile, leaving the
 /// cache and the compiled artifact silently out of sync.
+///
+/// `target/` excluded Cargo's own build directory for modules mixing
+/// in Rust, same as s`ource_hash()`. No C/C++ source would ever
+/// legitimately live there, so recursing into it is pure waste at
+/// best and a correctness risk at worst.
 fn native_sources(native_dir: &Path) -> Result<Vec<String>> {
     let mut entries: Vec<PathBuf> = walkdir::WalkDir::new(native_dir)
         .into_iter()
+        .filter_entry(|e| e.file_name().to_str() != Some("target"))
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .map(|e| e.path().to_path_buf())
@@ -183,7 +193,7 @@ fn native_sources(native_dir: &Path) -> Result<Vec<String>> {
 /// Prefer `$R_HOME/bin/<name>` when `R_HOME` is set (matches how R
 /// itself locates its own satellite binaries); otherwise fall back to
 /// bare `<name>` and let `Command` resolve it via `PATH`. No early
-/// existence probe beyond the `R_HOME` case — letting the actual
+/// existence probe beyond the `R_HOME` case, letting the actual
 /// `Command::status()`/`output()` call fail is simpler than adding a
 /// platform-specific `which`/`where` dependency just to check first.
 fn locate_binary(name: &str) -> String {
