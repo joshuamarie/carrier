@@ -31,6 +31,10 @@ enum Commands {
         /// Defaults to <name>-proj if not specified.
         #[arg(long)]
         dir_name: Option<String>,
+
+        /// Scaffold compiled-code support: c, rcpp, or rust
+        #[arg(long)]
+        native: Option<String>,
     },
 
     /// Bundle a module into <name>_<version>.tar.gz (default) or .rmbx
@@ -82,8 +86,8 @@ fn main() {
     let cli = Cli::parse();
 
     let result: Result<()> = match cli.command {
-        Commands::Init { name, dir_name } => {
-            commands::init::run(InitArgs { name, dir_name })
+        Commands::Init { name, dir_name, native } => {
+            commands::init::run(InitArgs { name, dir_name, native })
         }
         Commands::Bundle { path, rmbx } => {
             commands::bundle::run(BundleArgs { path, rmbx })
