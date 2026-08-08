@@ -52,7 +52,7 @@ pub fn run(name: &str, dir_name: Option<&str>, native: Option<NativeLang>) -> Re
     // `carrier-core` won't actually resolve/build this until that's
     // wired up too — flagging so it doesn't look "done" prematurely.
     if let Some(lang) = native {
-        let native_dir = project_root.join("src");
+        let native_dir = src_dir.join("src");
         fs::create_dir_all(&native_dir).with_context(|| {
             format!("Failed to create native directory: {}", native_dir.display())
         })?;
@@ -60,7 +60,7 @@ pub fn run(name: &str, dir_name: Option<&str>, native: Option<NativeLang>) -> Re
         let stub_name = format!("{}.{}", name, lang.src_extension());
         fs::write(native_dir.join(&stub_name), "").context("Failed to write native stub")?;
 
-        files.push(format!("src/{}", stub_name));
+        files.push(format!("{}/src/{}", name, stub_name));
     }
 
     println!("Initialized module '{}' in '{}'", name, project_dir_name);
