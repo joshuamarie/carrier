@@ -131,17 +131,27 @@ impl ModuleDep {
 /// to find via `system.file()` before `R CMD SHLIB` can run.
 ///
 /// `path` is optional and exists purely as an override. When omitted,
-/// `resolve_native_dir()` falls back to `<module_src_dir>/src/` (the
-/// original convention), so whether a module HAS native code at all
-/// is still a filesystem fact for the common case, not something
-/// that requires a `[native]` block to discover, the same way
-/// `__init__.R`'s presence (not a TOML field) is what makes a
-/// directory a module. `path` is for the case that convention
-/// doesn't fit: compiled code living somewhere other than nested
-/// under the module's own source directory.
+/// `resolve_native_dirs()` scans the module's whole source tree for
+/// compiled-code dirs instead of assuming one is where it must live —
+/// so whether a module HAS native code at all is still a filesystem
+/// fact for the common case, not something that requires a `[native]`
+/// block to discover, the same way `__init__.R`'s presence (not a
+/// TOML field) is what makes a directory a module. `path` is for
+/// naming exactly one location by hand instead of relying on that
+/// scan — e.g. compiled code living outside the module's own source
+/// directory entirely, where auto-discovery wouldn't look.
+///
+/// `paths` is the same idea for more than one location: naming
+/// several compiled-code dirs explicitly rather than trusting
+/// auto-discovery to find them all. Auto-discovery already finds
+/// multiple scattered native dirs on its own regardless of what
+/// they're named — `paths` exists for pinning specific ones by hand,
+/// same motivation as `path`, just plural. `path` and `paths` are
+/// mutually exclusive; if both are set, `paths` wins.
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct NativeConfig {
     pub path: Option<String>,
+    pub paths: Option<Vec<String>>,
     pub build_deps: Option<BTreeMap<String, PackageDep>>,
 }
 
@@ -275,21 +285,26 @@ impl CarrierToml {
     }
 
     /// Every native code location this module actually has, not just
-    /// the one `[native].path` can override. An explicit `path` is
-    /// still a single, deliberate override. Same meaning as
-    /// `resolve_native_dir()`, kept for that case. Without one, this
-    /// scans the whole module source tree for compiled-code dirs
-    /// instead of assuming `src/` is the only place they can live.
-    /// A module can have several, nested under different submodules
-    /// (`mass/src/`, `temp/src/`, ...).
+    /// the one `[native].path` can override. `[native].paths` (plural)
+    /// wins if set — several deliberately-named locations. Otherwise
+    /// `[native].path` (singular) is one deliberate override — same
+    /// meaning as `resolve_native_dir()`, kept for that case. Without
+    /// either, this scans the whole module source tree for
+    /// compiled-code dirs instead of assuming `src/` is the only place
+    /// they can live — a module can have several, nested under
+    /// different submodules (`mass/src/`, `temp/src/`, ...).
     pub fn resolve_native_dirs(&self, project_root: &Path) -> Result<Vec<PathBuf>> {
-        match self.native.as_ref().and_then(|n| n.path.as_deref()) {
-            Some(path) => Ok(vec![project_root.join(path)]),
-            None => {
-                let src_dir = self.resolve_src_dir(project_root)?;
-                Ok(find_native_dirs(&src_dir))
-            }
+        let native = self.native.as_ref();
+
+        if let Some(paths) = native.and_then(|n| n.paths.as_ref()) {
+            return Ok(paths.iter().map(|p| project_root.join(p)).collect());
         }
+        if let Some(path) = native.and_then(|n| n.path.as_deref()) {
+            return Ok(vec![project_root.join(path)]);
+        }
+
+        let src_dir = self.resolve_src_dir(project_root)?;
+        Ok(find_native_dirs(&src_dir))
     }
 
     /// Whether this module has compiled code that needs building via
