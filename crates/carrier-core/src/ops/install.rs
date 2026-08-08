@@ -422,7 +422,7 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
 /// `NativeManifest.build_deps` currently exists as bundle-time
 /// metadata with no consuming code path.
 fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool) -> Result<()> {
-    let native_dirs = carrier_native::find_native_dirs(module_path);
+    let native_dirs = carrier_native::detect::find_native_dirs(module_path);
     if native_dirs.is_empty() {
         return Ok(());
     }

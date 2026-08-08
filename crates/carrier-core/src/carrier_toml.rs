@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use carrier_native::find_native_dirs;
+use carrier_native::detect::find_native_dirs;
 
 pub const DEFAULT_CRAN_MIRROR: &str = "https://cloud.r-project.org";
 
