@@ -21,6 +21,26 @@
 
 -   Fix: `gh:user/repo/tree/<ref>/<subpath>` sources now install the pinned ref instead of silently falling back to the default branch.
 
+-   Compiled code support: a module can now declare `[native]` in `carrier.toml` to ship C, C++, Rcpp, Rust, or Fortran code alongside its R source.
+
+    -   `carrier install` automatically compiles a module's native code as part of installing it — no manual build step. Compiled artifacts are cached locally (`~/.carrier/native-cache/`), keyed by source contents, platform, and R version, so unchanged code isn't recompiled on every install.
+
+    -   `carrier init <name> --native <ingredients>` scaffolds a compiled-code module from scratch — a starter source file, build configuration, and a small loader helper wired into `__init__.R`, so no module has to hand-write `dyn.load()`/platform-extension logic itself. `--native` takes a comma-separated set, e.g. `--native c`, `--native rcpp`, `--native c,fortran`:
+
+        ``` bash
+        carrier init stats_native --native rcpp
+        ```
+
+    -   Compiled code doesn't have to live under `src/` 
+    
+        -   `[native]` accepts a `path` override:
+
+            ``` toml
+            [native]
+            path = "native/"
+            build_deps = { Rcpp = "*" }
+            ```
+
 # 0.1.0
 
 -   This is the initial version release of `carrier`
