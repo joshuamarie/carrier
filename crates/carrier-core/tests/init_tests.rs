@@ -28,7 +28,7 @@ impl Drop for Scratch {
 #[test]
 fn init_creates_expected_project_layout() {
     let scratch = Scratch::uncreated(unique_dir("layout"));
-    init::run("mymod", Some(scratch.path().to_str().unwrap())).unwrap();
+    init::run("mymod", Some(scratch.path().to_str().unwrap()), None).unwrap();
 
     assert!(scratch.path().join("carrier.toml").is_file());
     assert!(scratch.path().join("README.md").is_file());
@@ -38,7 +38,7 @@ fn init_creates_expected_project_layout() {
 #[test]
 fn init_carrier_toml_contains_module_name() {
     let scratch = Scratch::uncreated(unique_dir("toml-content"));
-    init::run("weathertools", Some(scratch.path().to_str().unwrap())).unwrap();
+    init::run("weathertools", Some(scratch.path().to_str().unwrap()), None).unwrap();
 
     let contents = std::fs::read_to_string(scratch.path().join("carrier.toml")).unwrap();
     assert!(contents.contains("name = \"weathertools\""));
@@ -47,7 +47,7 @@ fn init_carrier_toml_contains_module_name() {
 #[test]
 fn init_init_r_has_box_use_boilerplate() {
     let scratch = Scratch::uncreated(unique_dir("init-r"));
-    init::run("mymod", Some(scratch.path().to_str().unwrap())).unwrap();
+    init::run("mymod", Some(scratch.path().to_str().unwrap()), None).unwrap();
 
     let contents = std::fs::read_to_string(scratch.path().join("mymod").join("__init__.R")).unwrap();
     assert!(contents.contains("box::use()"));
@@ -58,7 +58,7 @@ fn init_fails_if_directory_already_exists() {
     let scratch = Scratch::uncreated(unique_dir("already-exists"));
     std::fs::create_dir_all(scratch.path()).unwrap();
 
-    let err = init::run("mymod", Some(scratch.path().to_str().unwrap())).unwrap_err();
+    let err = init::run("mymod", Some(scratch.path().to_str().unwrap()), None).unwrap_err();
     assert!(err.to_string().contains("already exists"));
 }
 
@@ -72,7 +72,7 @@ fn init_defaults_dir_name_to_name_proj_suffix() {
     // Clean up any leftovers from a previous failed run before starting.
     let _ = std::fs::remove_dir_all(&expected_dir);
 
-    init::run(&unique_name, None).unwrap();
+    init::run(&unique_name, None, None).unwrap();
     assert!(expected_dir.is_dir());
     assert!(expected_dir.join("carrier.toml").is_file());
 

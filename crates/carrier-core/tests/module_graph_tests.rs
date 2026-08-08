@@ -34,6 +34,7 @@ fn toml_clone(t: &CarrierToml) -> CarrierToml {
         },
         package_deps: t.package_deps.clone(),
         module_deps: t.module_deps.clone(),
+        native: None,
         test: None,
     }
 }
@@ -51,6 +52,7 @@ fn minimal_toml(name: &str, version: &str, module_deps: Option<BTreeMap<String, 
         },
         package_deps: None,
         module_deps,
+        native: None,
         test: None,
     }
 }

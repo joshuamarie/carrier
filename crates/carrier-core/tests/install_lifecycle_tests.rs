@@ -68,7 +68,7 @@ fn install_from_dir_then_remove_round_trip() {
 
     // Scaffold a real module project with `carrier init`.
     let project = Scratch::reserved("project");
-    init::run("roundtripmod", Some(project.path().to_str().unwrap())).unwrap();
+    init::run("roundtripmod", Some(project.path().to_str().unwrap()), None).unwrap();
 
     // Redirect the install target to a scratch "library" dir.
     let lib = Scratch::reserved("lib");
@@ -76,7 +76,7 @@ fn install_from_dir_then_remove_round_trip() {
 
     // install_deps = false → dependency install is a dry run, so this
     // never touches the network even though the project has no deps.
-    install::run(project.path().to_str().unwrap(), false, None).unwrap();
+    install::run(project.path().to_str().unwrap(), false, None, None).unwrap();
 
     let module_dir = lib.path().join("roundtripmod");
     assert!(module_dir.join("__init__.R").is_file());
@@ -102,12 +102,12 @@ fn reinstalling_replaces_the_previous_install() {
     let _guard = ENV_LOCK.lock().unwrap();
 
     let project = Scratch::reserved("project-reinstall");
-    init::run("reinstallmod", Some(project.path().to_str().unwrap())).unwrap();
+    init::run("reinstallmod", Some(project.path().to_str().unwrap()), None).unwrap();
 
     let lib = Scratch::reserved("lib-reinstall");
     let _env = CarrierLibGuard::set(lib.path());
 
-    install::run(project.path().to_str().unwrap(), false, None).unwrap();
+    install::run(project.path().to_str().unwrap(), false, None, None).unwrap();
 
     // Add a stray file directly into the installed module dir that a
     // clean reinstall should wipe out.
@@ -115,7 +115,7 @@ fn reinstalling_replaces_the_previous_install() {
     std::fs::write(module_dir.join("stale.R"), "leftover").unwrap();
     assert!(module_dir.join("stale.R").exists());
 
-    install::run(project.path().to_str().unwrap(), false, None).unwrap();
+    install::run(project.path().to_str().unwrap(), false, None, None).unwrap();
     assert!(!module_dir.join("stale.R").exists());
     assert!(module_dir.join("__init__.R").is_file());
 }
@@ -139,6 +139,6 @@ fn install_errors_on_project_without_carrier_toml() {
     let lib = Scratch::reserved("lib-no-toml");
     let _env = CarrierLibGuard::set(lib.path());
 
-    let err = install::run(project.path().to_str().unwrap(), false, None).unwrap_err();
+    let err = install::run(project.path().to_str().unwrap(), false, None, None).unwrap_err();
     assert!(err.to_string().contains("carrier.toml"));
 }

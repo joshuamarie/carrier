@@ -131,6 +131,7 @@ fn resolve_src_dir_defaults_to_module_name() {
         module: module_meta("mymod", None),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -145,6 +146,7 @@ fn resolve_src_dir_errors_when_default_dir_missing() {
         module: module_meta("mymod", None),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -161,6 +163,7 @@ fn resolve_src_dir_errors_when_init_r_missing() {
         module: module_meta("mymod", None),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -179,6 +182,7 @@ fn resolve_src_dir_uses_explicit_src_override() {
         module: module_meta("mymod", Some("custom_source")),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -193,6 +197,7 @@ fn resolve_src_dir_errors_when_explicit_src_not_a_directory() {
         module: module_meta("mymod", Some("does_not_exist")),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 

@@ -133,7 +133,7 @@ fn convert_proj_installs_via_carrier_install_run() {
     // install_deps = false → dependency install stays a dry run, so this
     // never touches the network regardless of what convert-proj declares
     // under [package_deps].
-    install::run(dir.to_str().unwrap(), false, None).expect("installing convert-proj should succeed");
+    install::run(dir.to_str().unwrap(), false, None, None).expect("installing convert-proj should succeed");
 
     let module_dir = lib.path().join(&toml.module.name);
     assert!(module_dir.join("__init__.R").is_file());
