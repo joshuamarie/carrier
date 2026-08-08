@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use carrier_native::find_native_dirs;
 
 pub const DEFAULT_CRAN_MIRROR: &str = "https://cloud.r-project.org";
 
@@ -130,8 +131,8 @@ impl ModuleDep {
 /// to find via `system.file()` before `R CMD SHLIB` can run.
 ///
 /// `path` is optional and exists purely as an override. When omitted,
-/// `resolve_native_dir()` falls back to `<module_src_dir>/src/` — the
-/// original convention — so whether a module HAS native code at all
+/// `resolve_native_dir()` falls back to `<module_src_dir>/src/` (the
+/// original convention), so whether a module HAS native code at all
 /// is still a filesystem fact for the common case, not something
 /// that requires a `[native]` block to discover, the same way
 /// `__init__.R`'s presence (not a TOML field) is what makes a
@@ -209,7 +210,7 @@ impl CarrierToml {
     /// Resolve the source directory for this module.
     ///
     /// Rules:
-    ///   1. If `src` is set, use that directory — any name is fine,
+    ///   1. If `src` is set, use that directory, any name is fine,
     ///      but it must exist and contain `__init__.R`.
     ///   2. If `src` is omitted, the directory must be named exactly
     ///      after the module. No guessing, no fallbacks.
@@ -232,7 +233,8 @@ impl CarrierToml {
             return Ok(dir);
         }
 
-        // Default — directory must be named after the module, no guessing
+        // Default 
+        // Directory must be named after the module, no guessing
         let dir = project_root.join(&self.module.name);
         if !dir.is_dir() {
             bail!(
@@ -258,7 +260,7 @@ impl CarrierToml {
     /// Resolve the directory containing this module's compiled code,
     /// independent of `resolve_src_dir()`. A module's R source (`src`
     /// in `[module]`) and its native code (`path` in `[native]`) are
-    /// unrelated locations — neither is derived from the other. A
+    /// unrelated locations, but neither is derived from the other. A
     /// module could have `src = "R/"` and `[native] path = "cpp/"`
     /// with no naming relationship between them at all.
     ///
@@ -272,16 +274,33 @@ impl CarrierToml {
         }
     }
 
+    /// Every native code location this module actually has, not just
+    /// the one `[native].path` can override. An explicit `path` is
+    /// still a single, deliberate override. Same meaning as
+    /// `resolve_native_dir()`, kept for that case. Without one, this
+    /// scans the whole module source tree for compiled-code dirs
+    /// instead of assuming `src/` is the only place they can live.
+    /// A module can have several, nested under different submodules
+    /// (`mass/src/`, `temp/src/`, ...).
+    pub fn resolve_native_dirs(&self, project_root: &Path) -> Result<Vec<PathBuf>> {
+        match self.native.as_ref().and_then(|n| n.path.as_deref()) {
+            Some(path) => Ok(vec![project_root.join(path)]),
+            None => {
+                let src_dir = self.resolve_src_dir(project_root)?;
+                Ok(find_native_dirs(&src_dir))
+            }
+        }
+    }
+
     /// Whether this module has compiled code that needs building via
     /// `R CMD SHLIB` before it can be loaded. Purely a filesystem
-    /// check against whatever `resolve_native_dir()` resolves to — a
+    /// check against whatever `resolve_native_dir()` resolves to. A
     /// `Makevars` or `Makevars.win` there is what makes a module
     /// "native," not `[native]`'s presence in the TOML (an author can
     /// still use `[native]` for `build_deps` alone without implying
     /// compiled code exists).
     pub fn has_native_code(&self, project_root: &Path) -> Result<bool> {
-        let native_dir = self.resolve_native_dir(project_root)?;
-        Ok(native_dir.join("Makevars").exists() || native_dir.join("Makevars.win").exists())
+        Ok(!self.resolve_native_dirs(project_root)?.is_empty())
     }
 
     pub fn default_template(name: &str) -> String {
@@ -308,12 +327,12 @@ r_version = "4.0.0"
 
 [native]
 # Only needed if native code doesn't live in the default location
-# (src/ under this module's source dir), or if src/Makevars
+# (src/ under this module's source dir), or if `src/Makevars`
 # references headers from another R package (e.g. Rcpp).
-# path = "native/"            # override — defaults to src/ if omitted
+# path = "native/"            # override (defaults to src/ if omitted)
 # build_deps = {{ Rcpp = "*" }}
-                    # resolved and installed before compiling —
-                    # does not imply a runtime dependency; list in
+                    # resolved and installed before compiling.
+                    # Does not imply a runtime dependency; list in
                     # [package_deps] too if the compiled code also
                     # needs it loaded at runtime
 
