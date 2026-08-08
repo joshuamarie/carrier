@@ -383,18 +383,32 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
 
 /// Compiles a module's native code, if it has any, right after
 /// unpacking. `module_path` is the module's own flat installed
-/// directory (`<install_dir>/<name>`). Native code, when present,
-/// always lands at `<module_path>/src/`, since bundling only ever
-/// walks a module's own source directory (see `tar::bundle`), so a
-/// `[native].path` override outside that directory wouldn't survive
-/// bundling to begin with. That's also why this doesn't reuse
-/// `resolve_native_dir()`: that function resolves an override from a
-/// project root, a concept that no longer exists once a module has
-/// been unpacked flat into its install directory.
+/// directory (`<install_dir>/<name>`). Native code isn't assumed to
+/// live in one blessed spot — `find_native_dirs` walks the whole
+/// installed tree, so a module can have several compiled-code dirs
+/// nested under different submodules (`mass/src/`, `temp/src/`, ...),
+/// the way numpy or tensorflow scatter extensions rather than
+/// collecting them under one top-level `src/`. Each is bundled and
+/// unpacked as part of the module's own tree already, so none of this
+/// needed changes to bundling, only an override via `[native].path`
+/// pointing *outside* the module's tree wouldn't survive bundling,
+/// and that single-override case is unaffected here.
 ///
-/// Detection is purely filesystem-based (`has_native_src`), not keyed
-/// off the manifest's `native` field, matching the same "presence of
-/// a file, not a TOML flag" philosophy `NativeConfig` was built on.
+/// That's also why this doesn't reuse `resolve_native_dirs()`: that
+/// method resolves from a project root, a concept that no longer
+/// exists once a module has been unpacked flat into its install
+/// directory.
+///
+/// Each artifact is built and named after the submodule that owns
+/// its native dir (the native dir's parent), not always the
+/// top-level module. `box::file()` resolves relative to whichever
+/// submodule calls it, so a compiled artifact belongs next to that
+/// submodule's own `__init__.R`, not necessarily the module root.
+///
+/// Detection is purely filesystem-based (`has_native_src` via
+/// `find_native_dirs`), not keyed off the manifest's `native` field,
+/// matching the same "presence of a file, not a TOML flag" philosophy
+/// `NativeConfig` was built on.
 ///
 /// Gated behind `install_deps` rather than a dedicated flag: a
 /// module's `[native].build_deps` (e.g. Rcpp) need to already be
@@ -408,8 +422,8 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
 /// `NativeManifest.build_deps` currently exists as bundle-time
 /// metadata with no consuming code path.
 fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool) -> Result<()> {
-    let native_dir = module_path.join("src");
-    if !carrier_native::has_native_src(&native_dir) {
+    let native_dirs = carrier_native::find_native_dirs(module_path);
+    if native_dirs.is_empty() {
         return Ok(());
     }
 
@@ -421,14 +435,19 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
         return Ok(());
     }
 
-    println!("Building native code for '{}'...", name);
-    let outcome = carrier_native::build(module_path, &native_dir, name)
-        .with_context(|| format!("Failed to build native code for '{}'", name))?;
-    println!(
-        "  built: {} ({})",
-        outcome.artifact_path.display(),
-        if outcome.from_cache { "cached" } else { "compiled" }
-    );
+    for native_dir in &native_dirs {
+        let target_dir = native_dir.parent().unwrap_or(module_path);
+        let artifact_name = target_dir.file_name().and_then(|f| f.to_str()).unwrap_or(name);
+
+        println!("Building native code for '{}' ({})...", name, native_dir.display());
+        let outcome = carrier_native::build(target_dir, native_dir, artifact_name)
+            .with_context(|| format!("Failed to build native code for '{}' at {}", name, native_dir.display()))?;
+        println!(
+            "  built: {} ({})",
+            outcome.artifact_path.display(),
+            if outcome.from_cache { "cached" } else { "compiled" }
+        );
+    }
 
     Ok(())
 }
