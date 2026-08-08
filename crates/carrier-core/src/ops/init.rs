@@ -2,9 +2,11 @@ use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
+use carrier_native::NativeLang;
+
 use crate::carrier_toml::CarrierToml;
 
-pub fn run(name: &str, dir_name: Option<&str>) -> Result<()> {
+pub fn run(name: &str, dir_name: Option<&str>, native: Option<NativeLang>) -> Result<()> {
     let default_dir = format!("{}-proj", name);
     let project_dir_name = dir_name.unwrap_or(&default_dir);
     let project_root = PathBuf::from(project_dir_name);
@@ -28,7 +30,7 @@ pub fn run(name: &str, dir_name: Option<&str>) -> Result<()> {
     )
     .context("Failed to write README.md")?;
 
-    // Source directory named after the module — the default convention
+    // The default convention: Source directory named after the module 
     let src_dir = project_root.join(name);
     fs::create_dir_all(&src_dir)
         .with_context(|| format!("Failed to create source directory: {}", src_dir.display()))?;
@@ -39,11 +41,27 @@ pub fn run(name: &str, dir_name: Option<&str>) -> Result<()> {
     )
     .context("Failed to write __init__.R")?;
 
-    let files = [
-        "carrier.toml",
-        "README.md",
-        &format!("{}/__init__.R", name),
+    let mut files = vec![
+        "carrier.toml".to_string(),
+        "README.md".to_string(),
+        format!("{}/__init__.R", name),
     ];
+
+    // TODO: this only scaffolds the native/ dir and a stub source file.
+    // It does NOT yet write a [native] block into carrier.toml, so
+    // `carrier-core` won't actually resolve/build this until that's
+    // wired up too — flagging so it doesn't look "done" prematurely.
+    if let Some(lang) = native {
+        let native_dir = project_root.join("src");
+        fs::create_dir_all(&native_dir).with_context(|| {
+            format!("Failed to create native directory: {}", native_dir.display())
+        })?;
+
+        let stub_name = format!("{}.{}", name, lang.src_extension());
+        fs::write(native_dir.join(&stub_name), "").context("Failed to write native stub")?;
+
+        files.push(format!("src/{}", stub_name));
+    }
 
     println!("Initialized module '{}' in '{}'", name, project_dir_name);
     for f in &files {

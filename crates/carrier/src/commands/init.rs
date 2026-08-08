@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use carrier_core::ops::init::NativeLang;
+use carrier_native::NativeLang;
 
 pub struct InitArgs {
     pub name: String,
