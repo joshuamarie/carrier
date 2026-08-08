@@ -7,10 +7,14 @@ use crate::cache::{cache_dir, source_hash};
 
 #[derive(Debug)]
 pub struct BuildOutcome {
-    /// Where the compiled artifact ended up — always
+    /// Where the compiled artifact ended up —
     /// `<module_dir>/<module_name><dynlib_ext>`, next to `__init__.R`,
-    /// since `box::file()` resolves relative to the module root, not
-    /// wherever `[native].path` points.
+    /// since `box::file()` resolves relative to whichever module
+    /// calls it, not wherever `[native].path` points. `module_dir`
+    /// and `module_name` here mean whichever directory owns this
+    /// particular native dir — a submodule's own dir and name when a
+    /// module has several scattered compiled-code dirs, not
+    /// necessarily the top-level module.
     pub artifact_path: PathBuf,
     pub source_hash: String,
     /// `R.version$platform`, e.g. `x86_64-pc-linux-gnu`. Not a real
@@ -31,11 +35,13 @@ pub struct BuildOutcome {
 ///   - `.o` object files discarded afterward, not needed at runtime
 ///
 /// `native_dir` and `module_dir` are deliberately separate parameters.
-/// `native_dir` is wherever the module's `[native].path` resolves to.
-/// This function has no opinion on what that directory is called or
-/// where it sits relative to the module root. The compiled artifact's
-/// destination is always `module_dir` regardless, since that's where
-/// `box::file()` looks.
+/// `native_dir` is wherever a compiled-code dir resolves to. This
+/// function has no opinion on what that directory is called or where
+/// it sits relative to the module root, or which module it even
+/// belongs to. A caller building several scattered native dirs for
+/// one module passes a different `module_dir`/`module_name` pair per
+/// dir, so each artifact lands next to its own owning submodule's
+/// `__init__.R`, since that's where `box::file()` looks for it.
 ///
 /// Checks the local build cache first, keyed by source hash + platform
 /// + R version. A hit just copies the cached artifact into place and
@@ -212,7 +218,7 @@ fn run_rscript_capture(expr: &str) -> Result<String> {
         .arg("-e")
         .arg(expr)
         .output()
-        .with_context(|| format!("Failed to run '{rscript} -e \"{expr}\"' — is R installed and on PATH?"))?;
+        .with_context(|| format!("Failed to run '{rscript} -e \"{expr}\"' - is R installed and on PATH?"))?;
 
     if !output.status.success() {
         bail!(
