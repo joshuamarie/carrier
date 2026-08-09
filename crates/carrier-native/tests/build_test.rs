@@ -168,8 +168,6 @@ fn builds_caches_and_loads_stats_native() {
     // deps (Rcpp) — see the earlier `Rcpp_precious_remove` failure that
     // a manual dyn.load() without library(Rcpp) first ran into.
     assert_rolling_mean_matches(&first.artifact_path);
-
-    // tmp deletes itself here, on drop — nothing left behind either way.
 }
 
 fn assert_rolling_mean_matches(artifact_path: &Path) {

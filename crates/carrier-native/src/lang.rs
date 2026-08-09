@@ -8,7 +8,7 @@ use anyhow::{bail, Result};
 pub enum NativeLang {
     C,
     Cpp,
-    Rust,
+    // Rust,
     Fortran,
 }
 
@@ -17,7 +17,7 @@ impl NativeLang {
         match s.to_ascii_lowercase().as_str() {
             "c" => Ok(NativeLang::C),
             "cpp" | "c++" | "cxx" => Ok(NativeLang::Cpp),
-            "rust" | "rs" => Ok(NativeLang::Rust),
+            // "rust" | "rs" => Ok(NativeLang::Rust),
             "fortran" | "f90" | "f" => Ok(NativeLang::Fortran),
             other => bail!(
                 "Unknown native language '{other}'. Expected one of: c, cpp, rust, fortran"
@@ -30,7 +30,7 @@ impl NativeLang {
         match self {
             NativeLang::C => "c",
             NativeLang::Cpp => "cpp",
-            NativeLang::Rust => "rs",
+            // NativeLang::Rust => "rs",
             NativeLang::Fortran => "f90",
         }
     }
