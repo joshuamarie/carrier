@@ -2,6 +2,8 @@
 
 # Development version
 
+# v0.1.1
+
 -   Add `--repo` support on `carrier install` for the future updates. 
 
 -   A lockfile support on `carrier`. 
@@ -19,7 +21,12 @@
 
 -   Transitive module dependency resolution: a module's own `module_deps`/`package_deps` are now fetched and resolved recursively, not just the root project's. Dependency cycles are detected and rejected instead of silently resolving or hanging.
 
--   Fix: `gh:user/repo/tree/<ref>/<subpath>` sources now install the pinned ref instead of silently falling back to the default branch.
+-   Fixes on `carrier install` command: 
+    
+    -  `gh:user/repo/tree/<ref>/<subpath>` sources now install the pinned ref instead of silently falling back to the default branch.
+    -  Previously accepts bare names to install the module under local dir (e.g. `carrier install some-dir`), now flags an error
+       
+       -  You have to place `.` prefix or `/` suffix if you want to install the module under some local dir, e.g. `carrier install ./some-dir` or `carrier install some-dir/`
 
 # 0.1.0
 
