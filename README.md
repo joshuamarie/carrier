@@ -30,11 +30,11 @@ You can install `carrier` using the Shell installers.
 To install the specific version, use that version's URL instead of `latest`: 
 
 ``` bash
-curl -LsSf https://github.com/joshuamarie/carrier/releases/download/v0.1.0/carrier-installer.sh | bash
+curl -LsSf https://github.com/joshuamarie/carrier/releases/download/v0.1.1/carrier-installer.sh | bash
 ```
 
 ``` bash
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/joshuamarie/carrier/releases/download/v0.1.0/carrier-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/joshuamarie/carrier/releases/download/v0.1.1/carrier-installer.ps1 | iex"
 ```
 
 To install the development version of `carrier` from GitHub, one requires [Rust](https://www.rust-lang.org/tools/install) (stable toolchain), particularly `rustc` and `cargo` on your system to compile it from source.

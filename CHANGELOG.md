@@ -49,6 +49,13 @@
 
         -   You have to place `.` prefix or `/` suffix if you want to install the module under some local dir, e.g. `carrier install ./some-dir` or `carrier install some-dir/`
 
+-   Fixes on `carrier install` command: 
+    
+    -  `gh:user/repo/tree/<ref>/<subpath>` sources now install the pinned ref instead of silently falling back to the default branch.
+    -  Previously accepts bare names to install the module under local dir (e.g. `carrier install some-dir`), now flags an error
+       
+       -  You have to place `.` prefix or `/` suffix if you want to install the module under some local dir, e.g. `carrier install ./some-dir` or `carrier install some-dir/`
+
 # 0.1.0
 
 -   This is the initial version release of `carrier`
