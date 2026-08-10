@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,7 @@ const LOCK_FORMAT_VERSION: u32 = 1;
 /// only reports whether a module is already installed), so there is
 /// nothing concrete to pin for them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LockedPackage {
     pub name: String,
     pub version: String,
@@ -21,6 +22,7 @@ pub struct LockedPackage {
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CarrierLock {
     #[serde(default = "default_version")]
     pub version: u32,
@@ -66,6 +68,17 @@ pub fn read(project_root: &Path) -> Result<Option<CarrierLock>> {
         .with_context(|| format!("Failed to read {}", path.display()))?;
     let lock: CarrierLock = toml::from_str(&contents)
         .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+    if lock.version != LOCK_FORMAT_VERSION {
+        bail!(
+            "{} declares lock format version {}, but this build of carrier \
+             only understands version {}. Regenerate it with `carrier lock`.",
+            path.display(),
+            lock.version,
+            LOCK_FORMAT_VERSION
+        );
+    }
+
     Ok(Some(lock))
 }
 

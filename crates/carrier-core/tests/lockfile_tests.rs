@@ -60,6 +60,29 @@ fn a_malformed_lock_file_fails_to_read_rather_than_being_ignored() {
 }
 
 #[test]
+fn a_lock_with_no_recognized_fields_is_a_hard_error_not_an_empty_lock() {
+    // e.g. carrier.toml accidentally copied over carrier.lock — valid
+    // TOML, but none of it means anything as a lock. Before
+    // deny_unknown_fields this deserialized into an empty CarrierLock
+    // (version defaulted to 1, packages defaulted to []) instead of
+    // failing, so install would silently resolve everything fresh.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join(LOCK_FILE_NAME),
+        "[module]\nname = \"fpurrr\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    assert!(read(dir.path()).is_err());
+}
+
+#[test]
+fn a_lock_declaring_an_unsupported_format_version_is_a_hard_error() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join(LOCK_FILE_NAME), "version = 99\n").unwrap();
+    assert!(read(dir.path()).is_err());
+}
+
+#[test]
 fn written_packages_are_sorted_for_a_stable_diff() {
     let dir = tempfile::tempdir().unwrap();
     let mut resolved = BTreeMap::new();

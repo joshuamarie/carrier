@@ -46,7 +46,7 @@ cargo install --git https://github.com/joshuamarie/carrier
 
 ``` r
 # install.packages('pak')
-pak::pak("joshuamarie/box@carrier-module-support")
+pak::pak("joshuamarie/box@feature/carrier-module-support")
 ```
 
 ## Verifying the install

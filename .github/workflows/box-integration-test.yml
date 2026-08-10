@@ -35,7 +35,7 @@ jobs:
             - name: "Install the patched {box} fork"
               run: |
                   Rscript -e 'install.packages("pak")'
-                  Rscript -e 'pak::pak("joshuamarie/box@carrier-module-support")'
+                  Rscript -e 'pak::pak("joshuamarie/box@feature/carrier-module-support")'
 
             - name: "Fetch fpurrr"
               run: git clone --depth 1 https://github.com/joshuamarie/fpurrr.git fpurrr-src
