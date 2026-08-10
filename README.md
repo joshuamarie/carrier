@@ -48,7 +48,7 @@ Then install the particular main dependency `{box}`. In a meantime, kindly insta
 ``` r
 # Install the package through GitHub
 # install.packages('pak')
-pak::pak("joshuamarie/box@carrier-module-support")
+pak::pak("joshuamarie/box@feature/carrier-module-support")
 ```
 
 ## Requirements
