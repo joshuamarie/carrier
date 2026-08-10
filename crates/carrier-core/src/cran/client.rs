@@ -109,6 +109,14 @@ fn resolve_all(
                              to update the lock, or revert carrier.toml's repo for this package."
                         );
                     }
+                    let required = VersionSpec::parse(spec)?;
+                    if !required.matches(&version) {
+                        bail!(
+                            "carrier.lock pins '{name}' to {version}, but carrier.toml now \
+                             requires '{spec}' — the lock is stale. Re-run with --write-lock \
+                             (or `carrier lock`) to update it."
+                        );
+                    }
                     globally_resolved.insert(name.clone(), (version.clone(), repo.clone()));
                     to_install.insert(name.clone(), ResolvedInstall { version });
                 }
