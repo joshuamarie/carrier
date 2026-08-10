@@ -6,6 +6,7 @@ use tempfile::TempDir;
 use ::tar::Archive as TarArchive;
 use crate::carrier_toml::{CarrierToml, PackageDep};
 use crate::formats::{rmbx, tar};
+use crate::lockfile::{self, CarrierLock};
 use crate::ops::module_graph::ModuleFetcher;
 use crate::ops::resolve;
 use crate::paths::resolve_install_dir;
@@ -21,7 +22,7 @@ enum InstallSource {
 pub fn run(source: &str, install_deps: bool, repo: Option<&str>) -> Result<()> {
     match parse_source(source, repo)? {
         InstallSource::Rmbx(path) => install_from_rmbx(&path, install_deps),
-        InstallSource::Tar(path) => install_from_tar(&path, install_deps),
+        InstallSource::Tar(path) => install_from_tar(&path, install_deps, None),
         InstallSource::Dir(path) => install_from_dir(&path, install_deps),
         InstallSource::GitHub { user, repo, git_ref, subpath } => {
             install_from_github(&user, &repo, git_ref.as_deref(), subpath.as_deref(), install_deps)
@@ -187,8 +188,8 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
 /// `execute_plan` produced, so a caller installing from a local
 /// directory can write it out as `carrier.lock` when `--write-lock` is
 /// passed. A dry run or a plan with no packages yields an empty map.
-// fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<HashMap<String, (Version, String)>>;
-fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<()> {
+// fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&CarrierLock>) -> Result<HashMap<String, (Version, String)>>;
+fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&CarrierLock>) -> Result<()> {
     if !tar_path.exists() {
         bail!("File not found: {}", tar_path.display());
     }
@@ -223,7 +224,7 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool) -> Result<()> {
     let plan = resolve::resolve(&toml.package_deps, &toml.module_deps)?;
     println!("Dependencies:");
     resolve::print_plan(&plan);
-    resolve::execute_plan(&plan, !install_deps, None)?;
+    resolve::execute_plan(&plan, !install_deps, lock)?;
 
     Ok(())
 }
@@ -236,13 +237,16 @@ fn install_from_dir(project_root: &PathBuf, install_deps: bool) -> Result<()> {
         );
     }
 
+    let lock = lockfile::read(project_root)
+        .with_context(|| format!("Failed to read carrier.lock in {}", project_root.display()))?;
+
     let tmp = TempDir::new().context("Failed to create temp directory")?;
     let output_path = tmp.path().join("module.tar.gz");
 
     crate::ops::bundle::bundle_to(project_root, &output_path, false)
         .context("Failed to bundle project")?;
 
-    install_from_tar(&output_path, install_deps)
+    install_from_tar(&output_path, install_deps, lock.as_ref())
 }
 
 #[cfg(feature = "network")]
@@ -292,11 +296,15 @@ fn install_from_github(user: &str, repo: &str, git_ref: Option<&str>, subpath: O
         );
     }
 
+    let lock = lockfile::read(&project_root).with_context(|| {
+        format!("Failed to read carrier.lock in {}", project_root.display())
+    })?;
+
     let output_path = tmp.path().join(format!("{}.tar.gz", repo));
     crate::ops::bundle::bundle_to(&project_root, &output_path, false)
         .context("Failed to bundle downloaded module")?;
 
-    install_from_tar(&output_path, install_deps)
+    install_from_tar(&output_path, install_deps, lock.as_ref())
 }
 
 #[cfg(not(feature = "network"))]
