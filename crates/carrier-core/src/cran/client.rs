@@ -49,6 +49,7 @@ fn topo_order(
 
 struct ResolvedInstall {
     version: Version,
+    repo: String,
 }
 
 struct RepoResolution {
@@ -118,7 +119,7 @@ fn resolve_all(
                         );
                     }
                     globally_resolved.insert(name.clone(), (version.clone(), repo.clone()));
-                    to_install.insert(name.clone(), ResolvedInstall { version });
+                    to_install.insert(name.clone(), ResolvedInstall { version, repo: repo.clone() });
                 }
                 None => {
                     unlocked.insert(name.clone(), spec.clone());
@@ -129,7 +130,7 @@ fn resolve_all(
         if !unlocked.is_empty() {
             let resolved = resolve_install_set(&unlocked, &index, repo, &mut globally_resolved)?;
             for (name, r) in &resolved {
-                globally_resolved.insert(name.clone(), (r.version.clone(), repo.clone()));
+                globally_resolved.insert(name.clone(), (r.version.clone(), r.repo.clone()));
             }
             to_install.extend(resolved);
         }
@@ -171,7 +172,7 @@ pub fn install_packages(
     std::fs::create_dir_all(lib_path)
         .with_context(|| format!("Failed to create R lib dir: {}", lib_path.display()))?;
 
-    for (repo, RepoResolution { index, to_install }) in &per_repo {
+    for (_repo, RepoResolution { index, to_install }) in &per_repo {
         let order = topo_order(to_install, index);
 
         for pkg in &order {
@@ -196,7 +197,7 @@ pub fn install_packages(
                 println!("  [installing] {} {}...", pkg, resolved.version);
             }
 
-            match download_and_unpack(pkg, &resolved.version.to_string(), repo, lib_path) {
+            match download_and_unpack(pkg, &resolved.version.to_string(), &resolved.repo, lib_path) {
                 Ok(()) => {
                     println!("  [done] {} {}", pkg, resolved.version);
                 }
@@ -224,6 +225,7 @@ fn resolve_install_set(
     repo_url: &str,
     globally_resolved: &mut HashMap<String, (Version, String)>,
 ) -> Result<HashMap<String, ResolvedInstall>> {
+    let direct: HashSet<String> = requested.keys().cloned().collect();
     let mut result: HashMap<String, ()> = HashMap::new();
     let mut visited: HashSet<String> = HashSet::new();
     let mut queue: VecDeque<String> = VecDeque::new();
@@ -280,20 +282,39 @@ fn resolve_install_set(
                     );
                 }
             }
-            resolved.insert(pkg.clone(), ResolvedInstall { version: existing_version.clone() });
+            // A package only reached here transitively (e.g. purrr pulling
+            // in rlang) never claims it — it's already owned by whichever
+            // group resolved it as an actual direct dependency, and this
+            // group's own to_install has no business installing it a
+            // second time under the wrong repo. Only a group where pkg is
+            // itself one of `requested` may correct a stale repo tag —
+            // that's the one place carrier.toml's own declaration for
+            // this package lives.
+            if direct.contains(pkg) {
+                resolved.insert(pkg.clone(), ResolvedInstall {
+                    version: existing_version.clone(),
+                    repo: repo_url.to_owned(),
+                });
+            }
             continue;
         }
 
         let pkg_specs = match pkg_specs {
             Some(s) => s,
             None => {
-                resolved.insert(pkg.clone(), ResolvedInstall { version: record.version.clone() });
+                resolved.insert(pkg.clone(), ResolvedInstall {
+                    version: record.version.clone(),
+                    repo: repo_url.to_owned(),
+                });
                 continue;
             }
         };
 
         if VersionSpec::resolve(pkg_specs, std::slice::from_ref(&record.version)).is_some() {
-            resolved.insert(pkg.clone(), ResolvedInstall { version: record.version.clone() });
+            resolved.insert(pkg.clone(), ResolvedInstall {
+                version: record.version.clone(),
+                repo: repo_url.to_owned(),
+            });
             continue;
         }
 
@@ -303,7 +324,10 @@ fn resolve_install_set(
 
         match VersionSpec::resolve(pkg_specs, &archive_versions) {
             Some(v) => {
-                resolved.insert(pkg.clone(), ResolvedInstall { version: v.clone() });
+                resolved.insert(pkg.clone(), ResolvedInstall {
+                    version: v.clone(),
+                    repo: repo_url.to_owned(),
+                });
             }
             None => {
                 bail!(
