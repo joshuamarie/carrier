@@ -61,6 +61,63 @@ pub fn resolve(
     Ok(ResolvedPlan { packages, modules })
 }
 
+/// Build a plan straight from an existing lock instead of walking
+/// package_deps. A lock already holds the full transitive closure that
+/// `carrier lock` resolved — cli, lifecycle, magrittr, vctrs and
+/// everything else a direct dep like purrr pulls in, not just the names
+/// carrier.toml declares directly. resolve()'s one-level walk can't see
+/// past that first level, which is exactly what leaves those extra
+/// packages unrequested and uninstalled when a lock is present.
+///
+/// Every name still declared in package_deps keeps its own constraint
+/// string (so cran::client's own lock-vs-constraint check still catches
+/// a genuinely stale lock). A name that's only in the lock — a
+/// transitive dep never declared in carrier.toml — gets "*", since
+/// nothing in carrier.toml constrains it and the lock is the only
+/// authority on what it should resolve to.
+pub fn resolve_locked(
+    package_deps: &Option<BTreeMap<String, PackageDep>>,
+    module_deps: &Option<BTreeMap<String, ModuleDep>>,
+    lock: &crate::lockfile::CarrierLock,
+) -> Result<ResolvedPlan> {
+    let empty = BTreeMap::new();
+    let declared = package_deps.as_ref().unwrap_or(&empty);
+
+    for name in declared.keys() {
+        if !lock.packages.iter().any(|locked| &locked.name == name) {
+            bail!(
+                "'{name}' is declared in carrier.toml but missing from carrier.lock — \
+                 the lock is stale. Run `carrier lock --update` and commit the result."
+            );
+        }
+    }
+
+    let packages = lock
+        .packages
+        .iter()
+        .map(|locked| {
+            let version_spec = match declared.get(&locked.name) {
+                Some(dep) => dep.version().to_owned(),
+                None => "*".to_owned(),
+            };
+            let pinned = ResolvedPackage { version_spec, repo: locked.repo.clone() };
+            (locked.name.clone(), pinned)
+        })
+        .collect();
+
+    let mut mod_specs: BTreeMap<String, Vec<VersionSpec>> = BTreeMap::new();
+    for (name, dep) in module_deps.as_ref().unwrap_or(&BTreeMap::new()) {
+        let spec = VersionSpec::parse(dep.version())?;
+        mod_specs.entry(name.clone()).or_default().push(spec);
+    }
+    let modules = mod_specs
+        .into_keys()
+        .map(|name| (name, "latest".to_owned()))
+        .collect();
+
+    Ok(ResolvedPlan { packages, modules })
+}
+
 /// Shared by resolve() and module_graph::resolve_transitive() — collapses
 /// each package's accumulated version specs down to one, erroring on any
 /// real conflict rather than silently picking one. pub(crate) so
