@@ -221,7 +221,10 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&Carrie
 
     println!("Installed '{}' ({}) -> {}", name, version, module_path.display());
 
-    let plan = resolve::resolve(&toml.package_deps, &toml.module_deps)?;
+    let plan = match lock {
+        Some(locked) => resolve::resolve_locked(&toml.package_deps, &toml.module_deps, locked)?,
+        None => resolve::resolve(&toml.package_deps, &toml.module_deps)?,
+    };
     println!("Dependencies:");
     resolve::print_plan(&plan);
     resolve::execute_plan(&plan, !install_deps, lock)?;
