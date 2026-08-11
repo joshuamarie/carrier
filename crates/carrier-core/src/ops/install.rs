@@ -10,7 +10,6 @@ use crate::lockfile::{self, CarrierLock};
 use crate::ops::module_graph::ModuleFetcher;
 use crate::ops::resolve;
 use crate::paths::resolve_install_dir;
-use carrier_native::NativeLang;
 
 enum InstallSource {
     Rmbx(PathBuf),
@@ -20,7 +19,7 @@ enum InstallSource {
     Registry { name: String, repo: String },
 }
 
-pub fn run(source: &str, install_deps: bool, repo: Option<&str>, native: Option<NativeLang>) -> Result<()> {
+pub fn run(source: &str, install_deps: bool, repo: Option<&str>) -> Result<()> {
     match parse_source(source, repo)? {
         InstallSource::Rmbx(path) => install_from_rmbx(&path, install_deps),
         InstallSource::Tar(path) => install_from_tar(&path, install_deps, None),

@@ -57,9 +57,9 @@ enum Commands {
         install_deps: bool,
         #[arg(long, help = "Registry URL to install SOURCE from (registries aren't implemented yet)")]
         repo: Option<String>,
-        /// Build compiled code if present: c, rcpp, or rust
-        #[arg(long)]
-        native: Option<String>,
+        // /// Build compiled code if present: c, rcpp, or rust
+        // #[arg(long)]
+        // native: Option<String>,
     },
 
     /// Resolve R package dependencies and write carrier.lock, without
@@ -95,8 +95,11 @@ fn main() {
         Commands::Bundle { path, rmbx } => {
             commands::bundle::run(BundleArgs { path, rmbx })
         }
-        Commands::Install { source, install_deps, repo, native } => {
-            commands::install::run(InstallArgs { source, install_deps, repo, native })
+        // Commands::Install { source, install_deps, repo, native } => {
+        //     commands::install::run(InstallArgs { source, install_deps, repo, native })
+        // }
+        Commands::Install { source, install_deps, repo } => {
+            commands::install::run(InstallArgs { source, install_deps, repo })
         }
         Commands::Lock { path, update } => {
             commands::lock::run(LockArgs { path, update })
