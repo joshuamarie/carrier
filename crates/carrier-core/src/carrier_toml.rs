@@ -342,8 +342,8 @@ impl CarrierToml {
 # Only needed if native code doesn't live in the default location
 # (src/ under this module's source dir), or if `src/Makevars`
 # references headers from another R package (e.g. Rcpp).
-path = "{dir_name}/"            # override (defaults to src/ if omitted)
-# paths = ["{dir_name}/"]  # If there are multiple folders containing the native code
+path = "{name}/{dir_name}/"            # override (defaults to src/ if omitted)
+# paths = ["{name}/{dir_name}/"]  # If there are multiple folders containing the native code
 {build_deps_line}
 # resolved and installed before compiling.
 # Does not imply a runtime dependency; list in
