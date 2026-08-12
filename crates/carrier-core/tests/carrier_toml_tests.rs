@@ -213,3 +213,57 @@ fn default_template_contains_module_name_and_parses_as_toml() {
     let parsed: CarrierToml = toml::from_str(&template).unwrap();
     assert_eq!(parsed.module.name, "mymod");
 }
+
+#[test]
+fn default_template_none_leaves_native_block_fully_commented() {
+    let template = CarrierToml::default_template("mymod", None);
+    assert!(template.contains("# path = \"native/\""));
+    assert!(template.contains("# build_deps = { Rcpp = \"*\" }"));
+    assert!(!template.lines().any(|l| l.trim_start().starts_with("path =")));
+    assert!(!template.lines().any(|l| l.trim_start().starts_with("build_deps =")));
+}
+
+#[test]
+fn default_template_c_sets_path_under_module_dir_no_build_deps() {
+    let template = CarrierToml::default_template("mymod", Some((NativeLang::C, None)));
+    assert!(template.contains("path = \"mymod/c/\""));
+    assert!(template.contains("# build_deps = { Rcpp = \"*\" }"));
+}
+
+#[test]
+fn default_template_cpp_rcpp_sets_path_and_build_deps() {
+    let template = CarrierToml::default_template(
+        "mymod",
+        Some((NativeLang::Cpp, Some(Backend::Rcpp))),
+    );
+    assert!(template.contains("path = \"mymod/cpp/\""));
+    assert!(template.lines().any(|l| l.trim_start() == "build_deps = { Rcpp = \"*\" }"));
+}
+
+#[test]
+fn default_template_cpp_omitted_backend_defaults_to_rcpp() {
+    let template = CarrierToml::default_template("mymod", Some((NativeLang::Cpp, None)));
+    assert!(template.lines().any(|l| l.trim_start() == "build_deps = { Rcpp = \"*\" }"));
+}
+
+#[test]
+fn default_template_cpp11_sets_cpp11_build_deps() {
+    let template = CarrierToml::default_template(
+        "mymod",
+        Some((NativeLang::Cpp, Some(Backend::Cpp11))),
+    );
+    assert!(template.lines().any(|l| l.trim_start() == "build_deps = { cpp11 = \"*\" }"));
+}
+
+#[test]
+fn default_template_all_native_variants_parse_as_valid_toml() {
+    for native in [
+        None,
+        Some((NativeLang::C, None)),
+        Some((NativeLang::Cpp, Some(Backend::Rcpp))),
+        Some((NativeLang::Cpp, Some(Backend::Cpp11))),
+    ] {
+        let template = CarrierToml::default_template("mymod", native);
+        assert!(toml::from_str::<CarrierToml>(&template).is_ok());
+    }
+}
