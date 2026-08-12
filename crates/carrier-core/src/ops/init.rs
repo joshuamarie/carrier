@@ -2,11 +2,16 @@ use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::PathBuf;
 
-use carrier_native::NativeLang;
+use carrier_native::{Backend, NativeLang};
 
 use crate::carrier_toml::CarrierToml;
 
-pub fn run(name: &str, dir_name: Option<&str>, native: Option<NativeLang>) -> Result<()> {
+pub fn run(
+    name: &str,
+    dir_name: Option<&str>,
+    native: Option<NativeLang>,
+    backend: Option<Backend>,
+) -> Result<()> {
     let default_dir = format!("{}-proj", name);
     let project_dir_name = dir_name.unwrap_or(&default_dir);
     let project_root = PathBuf::from(project_dir_name);
@@ -47,21 +52,36 @@ pub fn run(name: &str, dir_name: Option<&str>, native: Option<NativeLang>) -> Re
         format!("{}/__init__.R", name),
     ];
 
-    // TODO: this only scaffolds the native/ dir and a stub source file.
-    // It does NOT yet write a [native] block into carrier.toml, so
-    // `carrier-core` won't actually resolve/build this until that's
-    // wired up too — flagging so it doesn't look "done" prematurely.
+    // TODO: this scaffolds the native dir with real, buildable example
+    // code now — it still does NOT write a [native] block into
+    // carrier.toml, so `carrier install --install-deps` won't find
+    // this dir on its own until that's wired up too.
     if let Some(lang) = native {
-        let native_dir = src_dir.join("src");
-        fs::create_dir_all(&native_dir).with_context(|| {
-            format!("Failed to create native directory: {}", native_dir.display())
-        })?;
-
-        let stub_name = format!("{}.{}", name, lang.src_extension());
-        fs::write(native_dir.join(&stub_name), "").context("Failed to write native stub")?;
-
-        files.push(format!("{}/src/{}", name, stub_name));
+        let scaffolded = carrier_native::scaffold::scaffold(&src_dir, lang, backend, name)
+            .with_context(|| format!("Failed to scaffold native code in {}", src_dir.display()))?;
+        for f in scaffolded {
+            files.push(format!("{}/{}", name, f));
+        }
+    } else {
+        fs::write(src_dir.join("__init__.R"), "#' @export\nbox::use()\n")
+            .context("Failed to write __init__.R")?;
+        files.push(format!("{}/__init__.R", name));
     }
+    // if let Some(lang) = native {
+    //     let dir_name = carrier_native::scaffold::native_dir_name(lang);
+    //     let native_dir = src_dir.join(dir_name);
+    //
+    //     let init_r = carrier_native::scaffold::scaffold(&native_dir, lang, cpp_backend, name)
+    //         .with_context(|| format!("Failed to scaffold native code in {}", native_dir.display()))?;
+    // 
+    //     fs::write(src_dir.join("__init__.R"), init_r)
+    //         .context("Failed to write __init__.R")?;
+    // 
+    //     for stem in ["hello", "add"] {
+    //         files.push(format!("{}/{}/{}.{}", name, dir_name, stem, lang.src_extension()));
+    //     }
+    //     files.push(format!("{}/{}/Makevars", name, dir_name));
+    // }
 
     println!("Initialized module '{}' in '{}'", name, project_dir_name);
     for f in &files {

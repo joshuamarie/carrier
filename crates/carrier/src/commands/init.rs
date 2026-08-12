@@ -1,14 +1,16 @@
 use anyhow::Result;
 
-use carrier_native::NativeLang;
+use carrier_native::{Backend, NativeLang};
 
 pub struct InitArgs {
     pub name: String,
     pub dir_name: Option<String>,
     pub native: Option<String>,
+    pub backend: Option<String>,
 }
 
 pub fn run(args: InitArgs) -> Result<()> {
     let native = args.native.as_deref().map(NativeLang::parse).transpose()?;
-    carrier_core::ops::init::run(&args.name, args.dir_name.as_deref(), native)
+    let backend = args.backend.as_deref().map(Backend::parse).transpose()?;
+    carrier_core::ops::init::run(&args.name, args.dir_name.as_deref(), native, backend)
 }
