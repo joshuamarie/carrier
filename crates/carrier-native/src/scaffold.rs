@@ -67,7 +67,6 @@ pub fn scaffold(
     module_dir: &Path,
     lang: NativeLang,
     backend: Option<Backend>,
-    module_name: &str,
 ) -> Result<Vec<String>> {
     let template = template_for(lang, backend)?;
     let dir_name = native_dir_name(lang);
@@ -83,7 +82,7 @@ pub fn scaffold(
     std::fs::write(native_dir.join("Makevars"), template.makevars)
         .context("Failed to write Makevars")?;
 
-    let hook = template.hook.replace("{{module_name}}", module_name);
+    let hook = template.hook.replace("{{native_dir}}", dir_name);
     std::fs::write(module_dir.join("hook.r"), hook).context("Failed to write hook.r")?;
     std::fs::write(module_dir.join("hello.r"), r_glue::HELLO).context("Failed to write hello.r")?;
     std::fs::write(module_dir.join("add.r"), r_glue::ADD).context("Failed to write add.r")?;
