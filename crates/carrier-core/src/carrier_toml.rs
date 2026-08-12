@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use carrier_native::detect::find_native_dirs;
+use carrier_native::{Backend, NativeLang};
 
 pub const DEFAULT_CRAN_MIRROR: &str = "https://cloud.r-project.org";
 
@@ -318,7 +319,51 @@ impl CarrierToml {
         Ok(!self.resolve_native_dirs(project_root)?.is_empty())
     }
 
-    pub fn default_template(name: &str) -> String {
+    /// `native` is `Some((lang, backend))` when `carrier init` was run
+    /// with `--native` — pre-fills `[native].path` (pointing at wherever
+    /// `scaffold()` actually wrote source, so `resolve_native_dir()`
+    /// doesn't fall back to a `src/` that no longer exists) and
+    /// `build_deps` (Rcpp/cpp11's headers, which nothing auto-detects).
+    /// `None` produces the same fully-commented placeholder block as
+    /// before, for a module with no compiled code yet.
+    pub fn default_template(name: &str, native: Option<(NativeLang, Option<Backend>)>) -> String {
+        let native_block = match native {
+            Some((lang, backend)) => {
+                let dir_name = carrier_native::scaffold::native_dir_name(lang);
+                let build_deps_line = match lang {
+                    NativeLang::Cpp => match backend.unwrap_or_default() {
+                        Backend::Rcpp => "build_deps = { Rcpp = \"*\" }".to_string(),
+                        Backend::Cpp11 => "build_deps = { cpp11 = \"*\" }".to_string(),
+                    },
+                    _ => "# build_deps = { Rcpp = \"*\" }".to_string(),
+                };
+                format!(
+                    r#"[native]
+# Only needed if native code doesn't live in the default location
+# (src/ under this module's source dir), or if `src/Makevars`
+# references headers from another R package (e.g. Rcpp).
+path = "{dir_name}/"            # override (defaults to src/ if omitted)
+# paths = ["{dir_name}/"]  # If there are multiple folders containing the native code
+{build_deps_line}
+# resolved and installed before compiling.
+# Does not imply a runtime dependency; list in
+# [package_deps] too if the compiled code also
+# needs it loaded at runtime"#
+                )
+            }
+            None => r#"[native]
+# Only needed if native code doesn't live in the default location
+# (src/ under this module's source dir), or if `src/Makevars`
+# references headers from another R package (e.g. Rcpp).
+# path = "native/"            # override (defaults to src/ if omitted)
+# build_deps = { Rcpp = "*" }
+                    # resolved and installed before compiling.
+                    # Does not imply a runtime dependency; list in
+                    # [package_deps] too if the compiled code also
+                    # needs it loaded at runtime"#
+                .to_string(),
+        };
+
         format!(
             r#"[module]
 name = "{name}"
@@ -340,16 +385,7 @@ r_version = "4.0.0"
 [module_deps]
 # other_module = "*"
 
-[native]
-# Only needed if native code doesn't live in the default location
-# (src/ under this module's source dir), or if `src/Makevars`
-# references headers from another R package (e.g. Rcpp).
-# path = "native/"            # override (defaults to src/ if omitted)
-# build_deps = {{ Rcpp = "*" }}
-                    # resolved and installed before compiling.
-                    # Does not imply a runtime dependency; list in
-                    # [package_deps] too if the compiled code also
-                    # needs it loaded at runtime
+{native_block}
 
 [test]
 framework = "testthat"
