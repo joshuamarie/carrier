@@ -226,7 +226,7 @@ fn default_template_none_leaves_native_block_fully_commented() {
 #[test]
 fn default_template_c_sets_path_under_module_dir_no_build_deps() {
     let template = CarrierToml::default_template("mymod", Some((NativeLang::C, None)));
-    assert!(template.contains("path = \"mymod/c/\""));
+    assert!(template.contains("path = \"c/\""));
     assert!(template.contains("# build_deps = { Rcpp = \"*\" }"));
 }
 
@@ -236,7 +236,7 @@ fn default_template_cpp_rcpp_sets_path_and_build_deps() {
         "mymod",
         Some((NativeLang::Cpp, Some(Backend::Rcpp))),
     );
-    assert!(template.contains("path = \"mymod/cpp/\""));
+    assert!(template.contains("path = \"cpp/\""));
     assert!(template.lines().any(|l| l.trim_start() == "build_deps = { Rcpp = \"*\" }"));
 }
 
