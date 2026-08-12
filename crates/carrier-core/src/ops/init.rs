@@ -50,8 +50,8 @@ pub fn run(
     // carrier.toml, so `carrier install --install-deps` won't find
     // this dir on its own until that's wired up too.
     if let Some(lang) = native {
-        let scaffolded = carrier_native::scaffold::scaffold(&src_dir, lang, backend, name)
-        .with_context(|| format!("Failed to scaffold native code in {}", src_dir.display()))?;
+        let scaffolded = carrier_native::scaffold::scaffold(&src_dir, lang, backend)
+            .with_context(|| format!("Failed to scaffold native code in {}", src_dir.display()))?;
         for f in scaffolded {
             files.push(format!("{}/{}", name, f));
         }
