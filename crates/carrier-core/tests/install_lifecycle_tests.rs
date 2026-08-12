@@ -68,7 +68,7 @@ fn install_from_dir_then_remove_round_trip() {
 
     // Scaffold a real module project with `carrier init`.
     let project = Scratch::reserved("project");
-    init::run("roundtripmod", Some(project.path().to_str().unwrap()), None).unwrap();
+    init::run("roundtripmod", Some(project.path().to_str().unwrap()), None, None).unwrap();
 
     // Redirect the install target to a scratch "library" dir.
     let lib = Scratch::reserved("lib");
@@ -102,7 +102,7 @@ fn reinstalling_replaces_the_previous_install() {
     let _guard = ENV_LOCK.lock().unwrap();
 
     let project = Scratch::reserved("project-reinstall");
-    init::run("reinstallmod", Some(project.path().to_str().unwrap()), None).unwrap();
+    init::run("reinstallmod", Some(project.path().to_str().unwrap()), None, None).unwrap();
 
     let lib = Scratch::reserved("lib-reinstall");
     let _env = CarrierLibGuard::set(lib.path());

@@ -1,4 +1,5 @@
 use carrier_core::carrier_toml::{Author, CarrierToml, ModuleMeta, PackageDep, DEFAULT_CRAN_MIRROR};
+use carrier_native::{Backend, NativeLang};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -206,7 +207,8 @@ fn resolve_src_dir_errors_when_explicit_src_not_a_directory() {
 
 #[test]
 fn default_template_contains_module_name_and_parses_as_toml() {
-    let template = CarrierToml::default_template("mymod");
+    // let template = CarrierToml::default_template("mymod");
+    let template = CarrierToml::default_template("mymod", Some((NativeLang::C, None)));
     assert!(template.contains("name = \"mymod\""));
     let parsed: CarrierToml = toml::from_str(&template).unwrap();
     assert_eq!(parsed.module.name, "mymod");
