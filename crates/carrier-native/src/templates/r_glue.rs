@@ -2,11 +2,11 @@ pub const HOOK: &str = r#"#' @export
 dll = NULL
 
 .on_load = function(ns) {
-    ns$dll = dyn.load(box::file(paste0("{{module_name}}", .Platform$dynlib.ext)))
+    ns$dll = dyn.load(box::file(paste0("lib/{{native_dir}}", .Platform$dynlib.ext)))
 }
 
 .on_unload = function(ns) {
-    dyn.unload(box::file(paste0("{{module_name}}", .Platform$dynlib.ext)))
+    dyn.unload(box::file(paste0("lib/{{native_dir}}", .Platform$dynlib.ext)))
 }
 "#;
 
@@ -16,11 +16,11 @@ pub const HOOK_RCPP: &str = r#"box::use(Rcpp[...])
 dll = NULL
 
 .on_load = function(ns) {
-    ns$dll = dyn.load(box::file(paste0("{{module_name}}", .Platform$dynlib.ext)))
+    ns$dll = dyn.load(box::file(paste0("lib/{{native_dir}}", .Platform$dynlib.ext)))
 }
 
 .on_unload = function(ns) {
-    dyn.unload(box::file(paste0("{{module_name}}", .Platform$dynlib.ext)))
+    dyn.unload(box::file(paste0("lib/{{native_dir}}", .Platform$dynlib.ext)))
 }
 "#;
 

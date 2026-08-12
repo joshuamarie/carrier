@@ -47,9 +47,9 @@ pub struct BuildOutcome {
 /// + R version. A hit just copies the cached artifact into place and
 /// skips invoking the compiler entirely.
 pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str) -> Result<BuildOutcome> {
-    if !native_dir.join("Makevars").exists() && !native_dir.join("Makevars.win").exists() {
+    if !crate::detect::has_native_src(native_dir) {
         bail!(
-            "No Makevars found in {} — nothing to compile.",
+            "No Makevars or .c/.cpp/.cc/.cxx sources found in {} — nothing to compile.",
             native_dir.display()
         );
     }
@@ -62,7 +62,10 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str) -> Result<
     let hash = source_hash(native_dir)?;
 
     let lib_name = format!("{module_name}{ext}");
-    let artifact_path = module_dir.join(&lib_name);
+    let lib_dir = module_dir.join("lib");
+    std::fs::create_dir_all(&lib_dir)
+        .with_context(|| format!("Failed to create {}", lib_dir.display()))?;
+    let artifact_path = lib_dir.join(&lib_name);
 
     let cached_path = cache_dir()?
         .join(module_name)
@@ -126,13 +129,6 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str) -> Result<
         )
     })?;
 
-    // .o files can land in nested subdirectories now that
-    // `native_sources()` walks recursively, cleaned up the same way
-    // it walks, not with a flat read_dir, or nested .o files are
-    // left behind. target/ excluded for the same reason as
-    // `source_hash()`/`native_sources()`. No reason to recurse into
-    // Cargo's own build output looking for stray .o files that
-    // wouldn't be there anyway.
     for entry in walkdir::WalkDir::new(native_dir)
         .into_iter()
         .filter_entry(|e| e.file_name().to_str() != Some("target"))
@@ -148,10 +144,7 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str) -> Result<
             .with_context(|| format!("Failed to create cache directory {}", parent.display()))?;
     }
     std::fs::copy(&artifact_path, &cached_path).with_context(|| {
-        format!(
-            "Failed to populate build cache at {}",
-            cached_path.display()
-        )
+        format!("Failed to populate build cache at {}", cached_path.display())
     })?;
 
     Ok(BuildOutcome {
