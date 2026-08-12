@@ -396,41 +396,34 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
 /// directory (`<install_dir>/<name>`). Native code isn't assumed to
 /// live in one blessed spot — `find_native_dirs` walks the whole
 /// installed tree, so a module can have several compiled-code dirs
-/// nested under different submodules (`mass/src/`, `temp/src/`, ...),
-/// the way numpy or tensorflow scatter extensions rather than
-/// collecting them under one top-level `src/`. Each is bundled and
-/// unpacked as part of the module's own tree already, so none of this
-/// needed changes to bundling, only an override via `[native].path`
-/// pointing *outside* the module's tree wouldn't survive bundling,
-/// and that single-override case is unaffected here.
+/// nested under different submodules (`mass/src/`, `temp/src/`, ...).
 ///
-/// That's also why this doesn't reuse `resolve_native_dirs()`: that
-/// method resolves from a project root, a concept that no longer
-/// exists once a module has been unpacked flat into its install
-/// directory.
+/// Each artifact is named after the native dir's OWN folder (`cpp`,
+/// `c`, `extra/src` → `src`), not the owning module/submodule. Two
+/// native dirs sharing one owning directory (e.g. `c/` and `cpp/`
+/// both directly under the module root) would otherwise collide on
+/// the same output filename. `box::file()` still resolves relative
+/// to whichever submodule calls it, so the artifact lands in that
+/// submodule's own `lib/`, just named for its own source dir now
+/// rather than its parent's.
 ///
-/// Each artifact is built and named after the submodule that owns
-/// its native dir (the native dir's parent), not always the
-/// top-level module. `box::file()` resolves relative to whichever
-/// submodule calls it, so a compiled artifact belongs next to that
-/// submodule's own `__init__.R`, not necessarily the module root.
+/// After a successful build, the native source dir is removed from
+/// the installed copy, same as an installed R package never keeps
+/// its own `src/`. The bundled `.tar.gz`/`.rmbx` archive still has
+/// the source, so a rebuild for another platform/R version is still
+/// possible from there; only the flat installed tree is pruned.
 ///
 /// Detection is purely filesystem-based (`has_native_src` via
-/// `find_native_dirs`), not keyed off the manifest's `native` field,
-/// matching the same "presence of a file, not a TOML flag" philosophy
-/// `NativeConfig` was built on.
+/// `find_native_dirs`), not keyed off the manifest's `native` field.
 ///
-/// Gated behind `install_deps` rather than a dedicated flag: a
-/// module's `[native].build_deps` (e.g. Rcpp) need to already be
-/// installed before `R CMD SHLIB` can find their headers, and
-/// `install_deps` is already what governs whether deps get installed
-/// at all. Worth revisiting if that coupling ever gets confusing.
+/// Gated behind `install_deps`: a module's `[native].build_deps`
+/// (e.g. Rcpp) need to already be installed before `R CMD SHLIB` can
+/// find their headers, and `install_deps` is already what governs
+/// whether deps get installed at all.
 ///
 /// Known gap: `[native].build_deps` aren't folded into package
 /// resolution anywhere yet. A build dep only actually gets installed
 /// today if it's ALSO listed under `[package_deps]` by convention.
-/// `NativeManifest.build_deps` currently exists as bundle-time
-/// metadata with no consuming code path.
 fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool) -> Result<()> {
     let native_dirs = carrier_native::detect::find_native_dirs(module_path);
     if native_dirs.is_empty() {
@@ -447,7 +440,10 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
 
     for native_dir in &native_dirs {
         let target_dir = native_dir.parent().unwrap_or(module_path);
-        let artifact_name = target_dir.file_name().and_then(|f| f.to_str()).unwrap_or(name);
+        let artifact_name = native_dir
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or(name);
 
         println!("Building native code for '{}' ({})...", name, native_dir.display());
         let outcome = carrier_native::build(target_dir, native_dir, artifact_name)
@@ -457,6 +453,10 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
             outcome.artifact_path.display(),
             if outcome.from_cache { "cached" } else { "compiled" }
         );
+
+        std::fs::remove_dir_all(native_dir).with_context(|| {
+            format!("Failed to remove native source at {}", native_dir.display())
+        })?;
     }
 
     Ok(())
