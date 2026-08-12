@@ -12,9 +12,7 @@ pub const DEFAULT_CRAN_MIRROR: &str = "https://cloud.r-project.org";
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum Author {
-    /// Simple string, e.g. ["John Doe"]
     Simple(String),
-    /// Inline table, e.g. { name = "John Doe", email = "doe.john@example.com" }
     Extended {
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,10 +96,6 @@ impl PackageDep {
 }
 
 // ---- ModuleDep ----
-/// `Simple(String)` mirrors `PackageDep::Simple` structurally, but there
-/// is no CRAN-equivalent default registry for modules. A `Simple` dep
-/// has a version constraint and nowhere to resolve it from. Resolution
-/// must treat a missing `source` as a hard error, not a fallback.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
@@ -131,24 +125,18 @@ impl ModuleDep {
 /// only R package deps (e.g. `Rcpp`), whose headers a `Makevars` needs
 /// to find via `system.file()` before `R CMD SHLIB` can run.
 ///
+/// `path`/`paths` are relative to the module's own source directory
+/// (whatever `resolve_src_dir()` resolves to) — the same base `src`
+/// in `[module]` already uses, not the project root `carrier.toml`
+/// lives in. `paths = ["cpp", "extra/src"]` in a module's own
+/// `carrier.toml` means exactly what it looks like: two dirs nested
+/// under that module's source tree.
+///
 /// `path` is optional and exists purely as an override. When omitted,
 /// `resolve_native_dirs()` scans the module's whole source tree for
-/// compiled-code dirs instead of assuming one is where it must live —
-/// so whether a module HAS native code at all is still a filesystem
-/// fact for the common case, not something that requires a `[native]`
-/// block to discover, the same way `__init__.R`'s presence (not a
-/// TOML field) is what makes a directory a module. `path` is for
-/// naming exactly one location by hand instead of relying on that
-/// scan — e.g. compiled code living outside the module's own source
-/// directory entirely, where auto-discovery wouldn't look.
-///
-/// `paths` is the same idea for more than one location: naming
-/// several compiled-code dirs explicitly rather than trusting
-/// auto-discovery to find them all. Auto-discovery already finds
-/// multiple scattered native dirs on its own regardless of what
-/// they're named — `paths` exists for pinning specific ones by hand,
-/// same motivation as `path`, just plural. `path` and `paths` are
-/// mutually exclusive; if both are set, `paths` wins.
+/// compiled-code dirs instead of assuming one is where it must live.
+/// `paths` is the same idea for more than one location. `path` and
+/// `paths` are mutually exclusive; if both are set, `paths` wins.
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct NativeConfig {
     pub path: Option<String>,
@@ -172,30 +160,9 @@ pub struct ModuleMeta {
     pub name: String,
     pub version: String,
     pub description: String,
-    /// Structured author entries. Each entry can be a plain string or an
-    /// inline table with optional `email`, `url`, and `orcid` fields.
-    ///
-    /// ``` toml
-    /// # Simple
-    /// authors = ["Joshua Marie"]
-    ///
-    /// # Extended
-    /// authors = [
-    ///     { name = "Joshua Marie", email = "joshua.marie.k@gmail.com" },
-    /// ]
-    ///
-    /// # Mixed
-    /// authors = [
-    ///     "Jane Doe",
-    ///     { name = "Joshua Marie", email = "joshua.marie.k@gmail.com" },
-    /// ]
-    /// ```
     pub authors: Vec<Author>,
     pub license: String,
     pub r_version: String,
-    /// Optional path to the source directory.
-    /// If omitted, carrier looks for a directory named after the module.
-    /// Must contain `__init__.R`.
     pub src: Option<String>,
 }
 
@@ -218,21 +185,11 @@ impl CarrierToml {
             .with_context(|| format!("Failed to parse carrier.toml at {}", toml_path.display()))
     }
 
-    /// Resolve the source directory for this module.
-    ///
-    /// Rules:
-    ///   1. If `src` is set, use that directory, any name is fine,
-    ///      but it must exist and contain `__init__.R`.
-    ///   2. If `src` is omitted, the directory must be named exactly
-    ///      after the module. No guessing, no fallbacks.
     pub fn resolve_src_dir(&self, project_root: &Path) -> Result<PathBuf> {
         if let Some(src) = &self.module.src {
             let dir = project_root.join(src);
             if !dir.is_dir() {
-                bail!(
-                    "`src` path '{}' is not a directory.",
-                    dir.display()
-                );
+                bail!("`src` path '{}' is not a directory.", dir.display());
             }
             if !dir.join("__init__.R").exists() {
                 bail!(
@@ -244,8 +201,6 @@ impl CarrierToml {
             return Ok(dir);
         }
 
-        // Default 
-        // Directory must be named after the module, no guessing
         let dir = project_root.join(&self.module.name);
         if !dir.is_dir() {
             bail!(
@@ -268,64 +223,46 @@ impl CarrierToml {
         Ok(dir)
     }
 
-    /// Resolve the directory containing this module's compiled code,
-    /// independent of `resolve_src_dir()`. A module's R source (`src`
-    /// in `[module]`) and its native code (`path` in `[native]`) are
-    /// unrelated locations, but neither is derived from the other. A
-    /// module could have `src = "R/"` and `[native] path = "cpp/"`
-    /// with no naming relationship between them at all.
-    ///
-    /// Falls back to `<module_src_dir>/src/` when `[native].path` is
-    /// omitted — see `NativeConfig`'s doc comment for why that default
-    /// exists and what it preserves.
+    /// Resolve the directory containing this module's compiled code.
+    /// `[native].path`, when set, is relative to the module's own
+    /// source directory — same base as `resolve_src_dir()` — not the
+    /// project root.
     pub fn resolve_native_dir(&self, project_root: &Path) -> Result<PathBuf> {
+        let src_dir = self.resolve_src_dir(project_root)?;
         match self.native.as_ref().and_then(|n| n.path.as_deref()) {
-            Some(path) => Ok(project_root.join(path)),
-            None => Ok(self.resolve_src_dir(project_root)?.join("src")),
+            Some(path) => Ok(src_dir.join(path)),
+            None => Ok(src_dir.join("src")),
         }
     }
 
-    /// Every native code location this module actually has, not just
-    /// the one `[native].path` can override. `[native].paths` (plural)
-    /// wins if set — several deliberately-named locations. Otherwise
-    /// `[native].path` (singular) is one deliberate override — same
-    /// meaning as `resolve_native_dir()`, kept for that case. Without
-    /// either, this scans the whole module source tree for
-    /// compiled-code dirs instead of assuming `src/` is the only place
-    /// they can live — a module can have several, nested under
-    /// different submodules (`mass/src/`, `temp/src/`, ...).
+    /// Every native code location this module actually has.
+    /// `[native].paths`/`path`, when set, are resolved relative to the
+    /// module's own source directory, not the project root — a module
+    /// can write `paths = ["cpp", "extra/src"]` meaning exactly those
+    /// two subdirectories of its own source tree. Without either, this
+    /// scans the whole module source tree for compiled-code dirs.
     pub fn resolve_native_dirs(&self, project_root: &Path) -> Result<Vec<PathBuf>> {
         let native = self.native.as_ref();
+        let src_dir = self.resolve_src_dir(project_root)?;
 
         if let Some(paths) = native.and_then(|n| n.paths.as_ref()) {
-            return Ok(paths.iter().map(|p| project_root.join(p)).collect());
+            return Ok(paths.iter().map(|p| src_dir.join(p)).collect());
         }
         if let Some(path) = native.and_then(|n| n.path.as_deref()) {
-            return Ok(vec![project_root.join(path)]);
+            return Ok(vec![src_dir.join(path)]);
         }
 
-        let src_dir = self.resolve_src_dir(project_root)?;
         Ok(find_native_dirs(&src_dir))
     }
 
-    /// Whether this module has compiled code that needs building via
-    /// `R CMD SHLIB` before it can be loaded. Purely a filesystem
-    /// check against whatever `resolve_native_dir()` resolves to. A
-    /// `Makevars` or `Makevars.win` there is what makes a module
-    /// "native," not `[native]`'s presence in the TOML (an author can
-    /// still use `[native]` for `build_deps` alone without implying
-    /// compiled code exists).
     pub fn has_native_code(&self, project_root: &Path) -> Result<bool> {
         Ok(!self.resolve_native_dirs(project_root)?.is_empty())
     }
 
     /// `native` is `Some((lang, backend))` when `carrier init` was run
-    /// with `--native` — pre-fills `[native].path` (pointing at wherever
-    /// `scaffold()` actually wrote source, so `resolve_native_dir()`
-    /// doesn't fall back to a `src/` that no longer exists) and
-    /// `build_deps` (Rcpp/cpp11's headers, which nothing auto-detects).
-    /// `None` produces the same fully-commented placeholder block as
-    /// before, for a module with no compiled code yet.
+    /// with `--native`. `path` is written relative to the module's own
+    /// source directory — matching how `resolve_native_dir()` now
+    /// resolves it — not the project root.
     pub fn default_template(name: &str, native: Option<(NativeLang, Option<Backend>)>) -> String {
         let native_block = match native {
             Some((lang, backend)) => {
@@ -342,8 +279,8 @@ impl CarrierToml {
 # Only needed if native code doesn't live in the default location
 # (src/ under this module's source dir), or if `src/Makevars`
 # references headers from another R package (e.g. Rcpp).
-path = "{name}/{dir_name}/"            # override (defaults to src/ if omitted)
-# paths = ["{name}/{dir_name}/"]  # If there are multiple folders containing the native code
+path = "{dir_name}/"            # override (defaults to src/ if omitted)
+# paths = ["{dir_name}/"]  # If there are multiple folders containing the native code
 {build_deps_line}
 # resolved and installed before compiling.
 # Does not imply a runtime dependency; list in
