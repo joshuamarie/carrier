@@ -460,7 +460,7 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
             .unwrap_or(name);
 
         println!("Building native code for '{}' ({})...", name, native_dir.display());
-        let outcome = carrier_native::build(target_dir, native_dir, artifact_name)
+        let outcome = carrier_native::build(target_dir, native_dir, artifact_name, name)
             .with_context(|| format!("Failed to build native code for '{}' at {}", name, native_dir.display()))?;
         println!(
             "  built: {} ({})",

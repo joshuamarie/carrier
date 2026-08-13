@@ -44,9 +44,17 @@ pub struct BuildOutcome {
 /// `__init__.R`, since that's where `box::file()` looks for it.
 ///
 /// Checks the local build cache first, keyed by source hash + platform
-/// + R version. A hit just copies the cached artifact into place and
-/// skips invoking the compiler entirely.
-pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str) -> Result<BuildOutcome> {
+/// + R version + `cache_key_name`. A hit just copies the cached
+/// artifact into place and skips invoking the compiler entirely.
+///
+/// `cache_key_name` is deliberately a separate parameter from
+/// `module_name`. `module_name` names the compiled artifact file
+/// (`<module_name><dynlib_ext>`) and can be a native dir's own folder
+/// name (e.g. `cpp`) when a module has several scattered native dirs.
+/// `cache_key_name` should be the owning module's actual name, so two
+/// unrelated modules that both happen to name their native folder
+/// `cpp` don't share a cache bucket.
+pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str, cache_key_name: &str) -> Result<BuildOutcome> {
     if !crate::detect::has_native_src(native_dir) {
         bail!(
             "No Makevars or .c/.cpp/.cc/.cxx sources found in {} — nothing to compile.",
@@ -68,7 +76,7 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str) -> Result<
     let artifact_path = lib_dir.join(&lib_name);
 
     let cached_path = cache_dir()?
-        .join(module_name)
+        .join(cache_key_name)
         .join(&target_triple)
         .join(&r_version)
         .join(&hash)
