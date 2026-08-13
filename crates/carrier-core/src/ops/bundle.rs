@@ -18,7 +18,7 @@ pub fn run(path: &str, use_rmbx: bool) -> Result<()> {
     let toml = CarrierToml::from_dir(&project_root)?;
     let src_path = toml.resolve_src_dir(&project_root)?;
     let meta = &toml.module;
-    let manifest = build_manifest(&toml, &src_path)?;
+    let manifest = build_manifest(&toml, &project_root, &src_path)?;
 
     let cwd = std::env::current_dir()
         .context("Failed to get current working directory")?;
@@ -49,7 +49,7 @@ pub fn bundle_to(project_root: &Path, output_path: &Path, use_rmbx: bool) -> Res
     let toml = CarrierToml::from_dir(project_root)?;
     let src_path = toml.resolve_src_dir(project_root)?;
 
-    let manifest = build_manifest(&toml, &src_path)?;
+    let manifest = build_manifest(&toml, project_root, &src_path)?;
 
     if use_rmbx {
         rmbx::bundle(&src_path, project_root, output_path, &manifest)
@@ -58,7 +58,7 @@ pub fn bundle_to(project_root: &Path, output_path: &Path, use_rmbx: bool) -> Res
     }
 }
 
-fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
+fn build_manifest(toml: &CarrierToml, project_root: &Path, src_path: &Path) -> Result<Manifest> {
     let meta = &toml.module;
 
     // let files = crate::formats::rmbx::collect_files(src_path)
@@ -97,6 +97,9 @@ fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
             .collect(),
     };
 
+    let lock = crate::lockfile::read(project_root)
+        .with_context(|| format!("Failed to read carrier.lock in {}", project_root.display()))?;
+
     Ok(Manifest::new(
         &meta.name,
         &meta.version,
@@ -106,5 +109,7 @@ fn build_manifest(toml: &CarrierToml, src_path: &Path) -> Result<Manifest> {
         &meta.r_version,
         dependencies,
         files,
+        lock.map(|l| l.packages),
+        toml.test.clone(),
     ))
 }

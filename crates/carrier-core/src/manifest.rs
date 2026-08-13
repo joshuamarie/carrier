@@ -1,10 +1,13 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::carrier_toml::Author;
+use crate::carrier_toml::{Author, TestConfig};
+use crate::lockfile::LockedPackage;
 
-/// Embedded inside every .rmbx archive as `manifest.json`.
-/// Mirrors the fields from the module's `carrier.toml`.
+/// Embedded inside every .rmbx/.tar.gz archive as `manifest.json`.
+/// Mirrors `carrier.toml`, minus `module.src` — bundle() already
+/// flattens the source tree relative to that directory, so by install
+/// time there's nothing left for `src` to point at.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Manifest {
     pub name: String,
@@ -18,6 +21,16 @@ pub struct Manifest {
     pub native: Option<NativeManifest>,
     pub files: Vec<String>,
     pub bundled_at: String,
+    /// The resolved package set from `carrier.lock` at bundle time, if
+    /// one existed. `dependencies.packages` only carries the constraint
+    /// strings declared in `carrier.toml`. This is what lets a
+    /// standalone archive reproduce the exact install a lock would have
+    /// given, without the original project directory around to read
+    /// `carrier.lock` from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked_packages: Option<Vec<LockedPackage>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test: Option<TestConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -84,6 +97,8 @@ impl Manifest {
         r_version: impl Into<String>,
         dependencies: Dependencies,
         files: Vec<String>,
+        locked_packages: Option<Vec<LockedPackage>>,
+        test: Option<TestConfig>,
     ) -> Self {
         Self {
             name: name.into(),
@@ -96,6 +111,8 @@ impl Manifest {
             native: None,
             files,
             bundled_at: Utc::now().to_rfc3339(),
+            locked_packages,
+            test,
         }
     }
 

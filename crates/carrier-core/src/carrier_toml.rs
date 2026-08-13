@@ -166,7 +166,7 @@ pub struct ModuleMeta {
     pub src: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestConfig {
     pub framework: String,
     pub dir: Option<String>,
