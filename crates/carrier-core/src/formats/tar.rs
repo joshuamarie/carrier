@@ -129,17 +129,15 @@ pub fn unpack(tar_path: &Path, install_dir: &Path, name: &str, version: &str) ->
     Ok(())
 }
 
-/// Read and parse the `carrier.toml` embedded in a `.tar.gz` without
-/// fully extracting the archive.
-pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
+/// Read the `manifest.json` embedded in a `.tar.gz` without unpacking
+/// the rest of the archive.
+pub fn read_manifest(tar_path: &Path) -> Result<crate::manifest::Manifest> {
     let file = File::open(tar_path)
         .with_context(|| format!("Failed to open: {}", tar_path.display()))?;
 
     let gz = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz);
 
-    // carrier.toml is no longer bundled — read manifest.json instead
-    // and reconstruct what we need, or bail with a clear message.
     for entry in archive.entries().context("Failed to read tar.gz entries")? {
         let mut entry = entry.context("Failed to read entry")?;
         let raw_path = entry.path()?.to_path_buf();
@@ -149,48 +147,8 @@ pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
             let mut s = String::new();
             std::io::Read::read_to_string(&mut entry, &mut s)
                 .context("Failed to read manifest.json from archive")?;
-            let manifest = crate::manifest::Manifest::from_json(&s)
-                .context("Failed to parse manifest.json from archive")?;
-            // Reconstruct a minimal CarrierToml from the manifest
-            return Ok(crate::carrier_toml::CarrierToml {
-                module: crate::carrier_toml::ModuleMeta {
-                    name: manifest.name,
-                    version: manifest.version,
-                    description: manifest.description,
-                    authors: manifest.authors
-                        .into_iter()
-                        .map(|n| crate::carrier_toml::Author::Simple(n.to_string()))
-                        .collect(),
-                    license: manifest.license,
-                    r_version: manifest.r_version,
-                    src: None,
-                },
-                package_deps: Some(
-                    manifest.dependencies.packages
-                        .into_iter()
-                        .map(|entry| {
-                            let dep = match entry.repo {
-                                Some(repo) => PackageDep::Extended { version: entry.version, repo: Some(repo) },
-                                None => PackageDep::Simple(entry.version),
-                            };
-                            (entry.name, dep)
-                        })
-                        .collect()
-                ),
-                module_deps: Some(
-                    manifest.dependencies.modules
-                        .into_iter()
-                        .map(|entry| {
-                            let dep = match entry.source {
-                                Some(source) => ModuleDep::Extended { version: entry.version, source: Some(source) },
-                                None => ModuleDep::Simple(entry.version),
-                            };
-                            (entry.name, dep)
-                        })
-                        .collect()
-                ),
-                test: None,
-            });
+            return crate::manifest::Manifest::from_json(&s)
+                .context("Failed to parse manifest.json from archive");
         }
     }
 
@@ -198,6 +156,51 @@ pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
         "No manifest.json found in {}. Is this a valid carrier package?",
         tar_path.display()
     )
+}
+
+/// Read and reconstruct the `carrier.toml`-equivalent embedded in a
+/// `.tar.gz`, without fully extracting the archive. carrier.toml
+/// itself is no longer bundled — this rebuilds what carrier.toml would
+/// have said from manifest.json instead.
+pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
+    let manifest = read_manifest(tar_path)?;
+
+    Ok(crate::carrier_toml::CarrierToml {
+        module: crate::carrier_toml::ModuleMeta {
+            name: manifest.name,
+            version: manifest.version,
+            description: manifest.description,
+            authors: manifest.authors,
+            license: manifest.license,
+            r_version: manifest.r_version,
+            src: None,
+        },
+        package_deps: Some(
+            manifest.dependencies.packages
+                .into_iter()
+                .map(|entry| {
+                    let dep = match entry.repo {
+                        Some(repo) => PackageDep::Extended { version: entry.version, repo: Some(repo) },
+                        None => PackageDep::Simple(entry.version),
+                    };
+                    (entry.name, dep)
+                })
+                .collect()
+        ),
+        module_deps: Some(
+            manifest.dependencies.modules
+                .into_iter()
+                .map(|entry| {
+                    let dep = match entry.source {
+                        Some(source) => ModuleDep::Extended { version: entry.version, source: Some(source) },
+                        None => ModuleDep::Simple(entry.version),
+                    };
+                    (entry.name, dep)
+                })
+                .collect()
+        ),
+        test: manifest.test,
+    })
 }
 
 pub fn collect_files(base: &Path) -> Result<Vec<String>> {
