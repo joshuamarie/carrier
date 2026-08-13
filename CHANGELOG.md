@@ -2,6 +2,16 @@
 
 # Development version
 
+# v0.1.2
+
+## Fixes
+
+- Bundled `.rmbx`/`.tar.gz` archives now carry the resolved `carrier.lock` in their manifest. Previously, installing a standalone archive on a machine that never had the source project re-resolved dependencies fresh every time, silently ignoring any pin the project's lock had made.
+
+- `carrier.toml`'s `[test]` config and extended author fields (`email`, `url`, `orcid`) were dropped when a bundled archive's metadata got reconstructed 
+
+    -  `[test]` was never carried at all, and an extended author collapsed into a plain name string. Both now round-trip intact.
+
 # v0.1.1
 
 -   Add `--repo` support on `carrier install` for the future updates. 
