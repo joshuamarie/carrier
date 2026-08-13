@@ -163,6 +163,8 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
         name, version, module_path.display()
     );
 
+    let lock = manifest.locked_packages.map(CarrierLock::from_packages);
+
     let package_deps = Some(
         manifest.dependencies.packages
             .into_iter()
@@ -176,10 +178,13 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
             .collect()
     );
 
-    let plan = resolve::resolve(&package_deps, &None)?;
+    let plan = match &lock {
+        Some(locked) => resolve::resolve_locked(&package_deps, &None, locked)?,
+        None => resolve::resolve(&package_deps, &None)?,
+    };
     println!("Dependencies:");
     resolve::print_plan(&plan);
-    resolve::execute_plan(&plan, !install_deps, None)?;
+    resolve::execute_plan(&plan, !install_deps, lock.as_ref())?;
 
     Ok(())
 }
@@ -221,13 +226,22 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&Carrie
 
     println!("Installed '{}' ({}) -> {}", name, version, module_path.display());
 
-    let plan = match lock {
+    // A dir/github install passes a lock read fresh from the source
+    // project. A standalone .tar.gz has no project directory to read
+    // one from — fall back to whatever `carrier bundle` baked into the
+    // archive's manifest.json at bundle time.
+    let embedded_lock = tar::read_manifest(tar_path)?
+        .locked_packages
+        .map(CarrierLock::from_packages);
+    let effective_lock = lock.cloned().or(embedded_lock);
+
+    let plan = match &effective_lock {
         Some(locked) => resolve::resolve_locked(&toml.package_deps, &toml.module_deps, locked)?,
         None => resolve::resolve(&toml.package_deps, &toml.module_deps)?,
     };
     println!("Dependencies:");
     resolve::print_plan(&plan);
-    resolve::execute_plan(&plan, !install_deps, lock)?;
+    resolve::execute_plan(&plan, !install_deps, effective_lock.as_ref())?;
 
     Ok(())
 }

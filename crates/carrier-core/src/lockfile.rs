@@ -21,7 +21,7 @@ pub struct LockedPackage {
     pub repo: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CarrierLock {
     #[serde(default = "default_version")]
@@ -35,6 +35,13 @@ fn default_version() -> u32 {
 }
 
 impl CarrierLock {
+    /// Build a lock from an already-resolved package set — used when
+    /// reconstructing a lock from a bundle's embedded manifest, where
+    /// there is no carrier.lock file on disk to read.
+    pub fn from_packages(packages: Vec<LockedPackage>) -> Self {
+        Self { version: LOCK_FORMAT_VERSION, packages }
+    }
+
     /// Look up a locked package by name and return its exact version,
     /// already parsed. A malformed entry is a hard error rather than a
     /// silent fall-through to fresh resolution — a lock the tool can't
