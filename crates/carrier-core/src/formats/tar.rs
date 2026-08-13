@@ -57,7 +57,7 @@ pub fn bundle(
     // with the bundle and can be extracted into .dist-info on install.
     let manifest_json = manifest.to_json()?;
     let manifest_bytes = manifest_json.as_bytes();
-    let manifest_tar_name = format!("{}/{}/manifest.json", top, manifest.name);
+    let manifest_tar_name = format!("{}/manifest.json", top);
     let mut header = tar::Header::new_gnu();
     header.set_size(manifest_bytes.len() as u64);
     header.set_mode(0o644);
@@ -105,12 +105,11 @@ pub fn unpack(tar_path: &Path, install_dir: &Path, name: &str, version: &str) ->
             continue;
         }
 
-        // manifest.json goes into .dist-info, everything else into place
-        let file_name = stripped.file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("");
-
-        let dest = if file_name == "manifest.json" {
+        // Only the reserved root-level manifest.json goes into .dist-info.
+        // Matching by full path (not basename) means a module file that
+        // happens to be named manifest.json — however deep — is never
+        // mistaken for it and misrouted.
+        let dest = if stripped == Path::new("manifest.json") {
             dist_info_dir.join("manifest.json")
         } else {
             install_dir.join(&stripped)
@@ -143,7 +142,7 @@ pub fn read_manifest(tar_path: &Path) -> Result<crate::manifest::Manifest> {
         let raw_path = entry.path()?.to_path_buf();
         let stripped = strip_top_level(&raw_path)?;
 
-        if stripped.file_name().and_then(|f| f.to_str()) == Some("manifest.json") {
+        if stripped == Path::new("manifest.json") {
             let mut s = String::new();
             std::io::Read::read_to_string(&mut entry, &mut s)
                 .context("Failed to read manifest.json from archive")?;
