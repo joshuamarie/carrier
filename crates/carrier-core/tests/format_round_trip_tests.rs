@@ -143,6 +143,36 @@ fn tar_read_toml_reconstructs_module_metadata() {
 }
 
 #[test]
+fn tar_user_file_named_manifest_json_survives_bundling() {
+    let src = Scratch::new("tar-collision-src");
+    make_fixture_src(src.path());
+    // A module file that happens to share a name with carrier's own
+    // generated manifest. This must not collide with it on write, and
+    // must not be misrouted into .dist-info on unpack.
+    std::fs::write(src.path().join("manifest.json"), "user's own data, not carrier's").unwrap();
+
+    let files = tar::collect_files(src.path()).unwrap();
+    let manifest = fixture_manifest("collisionmod", files);
+
+    let archive = Scratch::new("tar-collision-archive");
+    let archive_path = archive.path().join("collisionmod_0.1.0.tar.gz");
+    tar::bundle(src.path(), src.path(), &archive_path, &manifest).unwrap();
+
+    let install = Scratch::new("tar-collision-install");
+    tar::unpack(&archive_path, install.path(), "collisionmod", "0.1.0").unwrap();
+
+    // The user's file is installed as ordinary module content, untouched.
+    let user_file = install.path().join("collisionmod").join("manifest.json");
+    assert_eq!(std::fs::read_to_string(&user_file).unwrap(), "user's own data, not carrier's");
+
+    // carrier's own manifest still lands in .dist-info, and is still valid.
+    let dist_info = install.path().join("collisionmod-0.1.0.dist-info");
+    let carrier_manifest = std::fs::read_to_string(dist_info.join("manifest.json")).unwrap();
+    let parsed = Manifest::from_json(&carrier_manifest).unwrap();
+    assert_eq!(parsed.name, "collisionmod");
+}
+
+#[test]
 fn tar_read_toml_errors_on_non_carrier_archive() {
     let scratch = Scratch::new("tar-not-carrier");
     let not_carrier = scratch.path().join("plain.tar.gz");
