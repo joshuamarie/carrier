@@ -110,6 +110,8 @@ fn convert_proj_bundles_as_tar_gz_with_matching_metadata() {
         &toml.module.r_version,
         Default::default(),
         files,
+        None,
+        None,
     );
 
     tar::bundle(&src, &dir, &archive_path, &manifest).unwrap();

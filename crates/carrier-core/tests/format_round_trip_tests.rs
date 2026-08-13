@@ -1,5 +1,6 @@
-use carrier_core::carrier_toml::Author;
+use carrier_core::carrier_toml::{Author, TestConfig};
 use carrier_core::formats::{rmbx, tar};
+use carrier_core::lockfile::LockedPackage;
 use carrier_core::manifest::{Dependencies, Manifest, PackageDepEntry};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -43,7 +44,15 @@ fn fixture_manifest(name: &str, files: Vec<String>) -> Manifest {
         name,
         "0.1.0",
         "A test module",
-        vec![Author::Simple("Jane Doe".to_owned())],
+        vec![
+            Author::Simple("Jane Doe".to_owned()),
+            Author::Extended {
+                name: "John Smith".to_owned(),
+                email: Some("john@example.com".to_owned()),
+                url: None,
+                orcid: None,
+            },
+        ],
         "MIT",
         "4.0.0",
         Dependencies {
@@ -51,6 +60,15 @@ fn fixture_manifest(name: &str, files: Vec<String>) -> Manifest {
             modules: vec![],
         },
         files,
+        Some(vec![LockedPackage {
+            name: "dplyr".to_owned(),
+            version: "1.1.4".to_owned(),
+            repo: "https://cloud.r-project.org".to_owned(),
+        }]),
+        Some(TestConfig {
+            framework: "testthat".to_owned(),
+            dir: Some("tests".to_owned()),
+        }),
     )
 }
 
@@ -88,6 +106,13 @@ fn tar_bundle_and_unpack_round_trip() {
     let read_back = Manifest::from_json(&manifest_json).unwrap();
     assert_eq!(read_back.name, "mymod");
     assert_eq!(read_back.dependencies.packages[0].name, "dplyr");
+
+    let locked = read_back.locked_packages.expect("locked_packages should survive the round trip");
+    assert_eq!(locked[0].name, "dplyr");
+    assert_eq!(locked[0].version, "1.1.4");
+
+    let test_cfg = read_back.test.expect("test config should survive the round trip");
+    assert_eq!(test_cfg.framework, "testthat");
 }
 
 #[test]
@@ -107,6 +132,14 @@ fn tar_read_toml_reconstructs_module_metadata() {
     assert_eq!(toml.module.license, "MIT");
     let deps = toml.package_deps.unwrap();
     assert!(deps.contains_key("dplyr"));
+
+    let test_cfg = toml.test.expect("test config should survive read_toml's reconstruction");
+    assert_eq!(test_cfg.framework, "testthat");
+    assert_eq!(test_cfg.dir.as_deref(), Some("tests"));
+
+    let john = toml.module.authors.iter().find(|a| a.name() == "John Smith")
+        .expect("Extended author should survive read_toml's reconstruction");
+    assert_eq!(john.email(), Some("john@example.com"));
 }
 
 #[test]
@@ -167,4 +200,6 @@ fn rmbx_read_manifest_without_full_extraction() {
     assert_eq!(read_back.name, "peekmod");
     assert_eq!(read_back.version, "0.1.0");
     assert_eq!(read_back.license, "MIT");
+    assert!(read_back.locked_packages.is_some());
+    assert!(read_back.test.is_some());
 }
