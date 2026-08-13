@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use commands::{
+    build::BuildArgs,
     bundle::BundleArgs,
     init::InitArgs,
     install::InstallArgs,
@@ -51,6 +52,14 @@ enum Commands {
         rmbx: bool,
     },
 
+    /// Compile a module's native code in place for local dev/testing.
+    /// Does not delete the native source, unlike the build step that
+    /// runs during `install`.
+    Build {
+        /// Path to the project root (e.g. `.` or `./my-project`)
+        path: String,
+    },
+
     /// Install a module from a .tar.gz, .rmbx, GitHub (gh:user/repo), or
     /// a module registry (bare name + --repo; registries aren't
     /// implemented yet)
@@ -95,6 +104,9 @@ fn main() {
     let result: Result<()> = match cli.command {
         Commands::Init { name, dir_name, native, backend } => {
             commands::init::run(InitArgs { name, dir_name, native, backend })
+        }
+        Commands::Build { path } => {
+            commands::build::run(BuildArgs { path })
         }
         Commands::Bundle { path, rmbx } => {
             commands::bundle::run(BundleArgs { path, rmbx })
