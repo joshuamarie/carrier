@@ -50,6 +50,13 @@ enum Commands {
         /// Bundle as .rmbx instead of the default .tar.gz
         #[arg(long)]
         rmbx: bool,
+
+        /// Also compile native code in place and include the tagged
+        /// binary in the archive alongside source. A mismatched or
+        /// missing tag on install falls back to compiling from the
+        /// source that ships in the same archive either way.
+        #[arg(long)]
+        binary: bool,
     },
 
     /// Compile a module's native code in place for local dev/testing.
@@ -108,8 +115,8 @@ fn main() {
         Commands::Build { path } => {
             commands::build::run(BuildArgs { path })
         }
-        Commands::Bundle { path, rmbx } => {
-            commands::bundle::run(BundleArgs { path, rmbx })
+        Commands::Bundle { path, rmbx, binary } => {
+            commands::bundle::run(BundleArgs { path, rmbx, binary })
         }
         // Commands::Install { source, install_deps, repo, native } => {
         //     commands::install::run(InstallArgs { source, install_deps, repo, native })

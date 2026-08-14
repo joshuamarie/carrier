@@ -3,8 +3,9 @@ use anyhow::Result;
 pub struct BundleArgs {
     pub path: String,
     pub rmbx: bool,
+    pub binary: bool, 
 }
 
 pub fn run(args: BundleArgs) -> Result<()> {
-    carrier_core::ops::bundle::run(&args.path, args.rmbx)
+    carrier_core::ops::bundle::run(&args.path, args.rmbx, args.binary)
 }
