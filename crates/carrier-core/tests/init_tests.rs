@@ -32,7 +32,15 @@ fn init_creates_expected_project_layout() {
 
     assert!(scratch.path().join("carrier.toml").is_file());
     assert!(scratch.path().join("README.md").is_file());
-    assert!(scratch.path().join("mymod").join("__init__.R").is_file());
+    assert!(scratch.path().join("mymod").join("__init__.r").is_file());
+    assert!(scratch.path().join("mymod").join("hello.r").is_file());
+    assert!(scratch.path().join("mymod").join("add.r").is_file());
+
+    // No native code was requested — nothing compiled-code-related
+    // should exist.
+    assert!(!scratch.path().join("mymod").join("hook.r").exists());
+    assert!(!scratch.path().join("mymod").join("c").exists());
+    assert!(!scratch.path().join("mymod").join("cpp").exists());
 }
 
 #[test]
@@ -45,12 +53,29 @@ fn init_carrier_toml_contains_module_name() {
 }
 
 #[test]
-fn init_init_r_has_box_use_boilerplate() {
+fn init_init_r_re_exports_hello_and_add() {
     let scratch = Scratch::uncreated(unique_dir("init-r"));
     init::run("mymod", Some(scratch.path().to_str().unwrap()), None, None).unwrap();
 
-    let contents = std::fs::read_to_string(scratch.path().join("mymod").join("__init__.R")).unwrap();
-    assert!(contents.contains("box::use()"));
+    let contents = std::fs::read_to_string(scratch.path().join("mymod").join("__init__.r")).unwrap();
+    assert!(contents.contains("box::use("));
+    assert!(contents.contains("./hello[hello_world]"));
+    assert!(contents.contains("./add[add]"));
+}
+
+#[test]
+fn init_hello_and_add_have_no_native_dependency() {
+    let scratch = Scratch::uncreated(unique_dir("init-r-pure"));
+    init::run("mymod", Some(scratch.path().to_str().unwrap()), None, None).unwrap();
+
+    let hello = std::fs::read_to_string(scratch.path().join("mymod").join("hello.r")).unwrap();
+    let add = std::fs::read_to_string(scratch.path().join("mymod").join("add.r")).unwrap();
+
+    for content in [&hello, &add] {
+        assert!(!content.contains("./hook"));
+        assert!(!content.contains("dll$"));
+        assert!(!content.contains(".Call"));
+    }
 }
 
 #[test]
