@@ -63,3 +63,28 @@ box::use(
     ./add[add], 
 )
 "#;
+
+pub const HELLO_PURE: &str = r#"#' Example function 1: Hello World!
+#'
+#' @param name A single string.
+#'
+#' @return A string: "Hello from R, <name>!"
+#'
+#' @export
+hello_world = function(name) {
+    paste0("Hello from R, ", name, "!")
+}
+"#;
+
+pub const ADD_PURE: &str = r#"#' Example function 2: Add function
+#'
+#' @param x First term.
+#' @param y Second term.
+#'
+#' @return The sum of `x` and `y`.
+#'
+#' @export
+add = function(x, y) {
+    x + y
+}
+"#;
