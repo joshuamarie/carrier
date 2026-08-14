@@ -144,6 +144,21 @@ pub struct NativeConfig {
     pub build_deps: Option<BTreeMap<String, PackageDep>>,
 }
 
+/// `box` accepts either case for a module's `.r`/`.R` extension, so
+/// carrier's own entry-point check shouldn't hardcode one — a module
+/// scaffolded with either convention, or hand-authored either way,
+/// must resolve the same regardless of which case the author used or
+/// which filesystem carrier itself happens to be running on.
+fn find_init_file(dir: &Path) -> Option<PathBuf> {
+    for name in ["__init__.r", "__init__.R"] {
+        let candidate = dir.join(name);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 // ---- CarrierToml (For metadata file) ----
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -191,10 +206,10 @@ impl CarrierToml {
             if !dir.is_dir() {
                 bail!("`src` path '{}' is not a directory.", dir.display());
             }
-            if !dir.join("__init__.R").exists() {
+            if find_init_file(&dir).is_none() {
                 bail!(
-                    "No `__init__.R` found in `src` directory '{}'.\n\
-                     `__init__.R` is required as the module entry point.",
+                    "No `__init__.r` (or `__init__.R`) found in `src` directory '{}'.\n\
+                     `__init__.r` is required as the module entry point.",
                     dir.display()
                 );
             }
@@ -212,10 +227,10 @@ impl CarrierToml {
                 self.module.name,
             );
         }
-        if !dir.join("__init__.R").exists() {
+        if find_init_file(&dir).is_none() {
             bail!(
-                "No `__init__.R` found in '{}'.\n\
-                 `__init__.R` is required as the module entry point, \
+                "No `__init__.r` (or `__init__.R`) found in '{}'.\n\
+                 `__init__.r` is required as the module entry point, \
                  similar to NAMESPACE in R packages.",
                 dir.display()
             );
