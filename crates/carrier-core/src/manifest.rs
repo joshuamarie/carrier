@@ -68,11 +68,27 @@ pub struct Dependencies {
 /// gets embedded here instead of re-read from a `carrier.toml` that
 /// may not travel with every install path (e.g. `.rmbx`).
 ///
-/// v1 has no `artifacts` list: carrier always compiles from source on
-/// install rather than shipping prebuilt per-platform binaries inside
-/// the archive. Distributing prebuilts is a registry-level concern
-/// that doesn't exist yet (see `install_from_registry`'s stub) — this
-/// field only needs to grow once that does.
+/// `artifacts` is empty unless the bundle was made with `--binary`.
+/// Distributing prebuilts beyond one machine's own tagged output is
+/// still a registry-level concern that doesn't exist yet.
+/// A single tagged, precompiled binary attached to a bundle by
+/// `carrier bundle --binary`. `target_triple`/`r_version` are the
+/// exact two axes ABI compatibility depends on for R native code (see
+/// `carrier_native::toolchain::BuildOutcome`). Install-only trusts
+/// this artifact when both match the installing machine AND
+/// `source_hash` matches the unpacked source's own recomputed hash.
+/// Any mismatch on any of the three falls back to compiling from
+/// source, same as today. This can only make an install faster, never
+/// wrong.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NativeArtifact {
+    pub target_triple: String,
+    pub r_version: String,
+    pub source_hash: String,
+    /// Path to the compiled file inside the archive, e.g. "lib/cpp.dll".
+    pub artifact: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct NativeManifest {
     pub build_deps: Vec<PackageDepEntry>,
@@ -85,6 +101,11 @@ pub struct NativeManifest {
     /// it's describing the bundler's directory, not necessarily
     /// byte-identical to what ends up on disk after unpacking.
     pub source_hash: String,
+    /// Precompiled binaries attached via `carrier bundle --binary`.
+    /// Empty for a plain source bundle. `#[serde(default)]` so a
+    /// manifest.json from before this field existed still parses.
+    #[serde(default)]
+    pub artifacts: Vec<NativeArtifact>,
 }
 
 impl Manifest {
