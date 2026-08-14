@@ -95,7 +95,7 @@ fn init_creates_expected_project_layout() {
 
     assert!(target.path().join("carrier.toml").is_file());
     assert!(target.path().join("README.md").is_file());
-    assert!(target.path().join("mymod").join("__init__.R").is_file());
+    assert!(target.path().join("mymod").join("__init__.r").is_file());
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn install_then_remove_round_trip() {
         .success();
 
     let module_dir = lib.path().join("mymod");
-    assert!(module_dir.join("__init__.R").is_file());
+    assert!(module_dir.join("__init__.r").is_file());
 
     carrier_cmd()
         .env("CARRIER_LIB", lib.path())
@@ -313,7 +313,7 @@ fn install_explicit_relative_path_still_installs_local_dir() {
         .assert()
         .success();
 
-    assert!(lib.path().join("convert").join("__init__.R").is_file());
+    assert!(lib.path().join("convert").join("__init__.r").is_file());
 }
 
 #[test]
@@ -342,7 +342,7 @@ fn install_bare_archive_filename_still_works_without_dot_slash() {
         .assert()
         .success();
 
-    assert!(lib.path().join("mymod").join("__init__.R").is_file());
+    assert!(lib.path().join("mymod").join("__init__.r").is_file());
 }
 
 // ── --repo scaffolding (no registry backend yet) ─────────────────────
