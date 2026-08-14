@@ -85,7 +85,7 @@ fn tar_bundle_and_unpack_round_trip() {
     let archive = Scratch::new("tar-archive");
     let archive_path = archive.path().join("mymod_0.1.0.tar.gz");
 
-    tar::bundle(src.path(), src.path(), &archive_path, &manifest).unwrap();
+    tar::bundle(src.path(), src.path(), &archive_path, &manifest, &[]).unwrap();
     assert!(archive_path.is_file());
 
     let install = Scratch::new("tar-install");
@@ -124,7 +124,7 @@ fn tar_read_toml_reconstructs_module_metadata() {
 
     let archive = Scratch::new("tar-readtoml-archive");
     let archive_path = archive.path().join("readback_0.1.0.tar.gz");
-    tar::bundle(src.path(), src.path(), &archive_path, &manifest).unwrap();
+    tar::bundle(src.path(), src.path(), &archive_path, &manifest, &[]).unwrap();
 
     let toml = tar::read_toml(&archive_path).unwrap();
     assert_eq!(toml.module.name, "readback");
@@ -156,7 +156,7 @@ fn tar_user_file_named_manifest_json_survives_bundling() {
 
     let archive = Scratch::new("tar-collision-archive");
     let archive_path = archive.path().join("collisionmod_0.1.0.tar.gz");
-    tar::bundle(src.path(), src.path(), &archive_path, &manifest).unwrap();
+    tar::bundle(src.path(), src.path(), &archive_path, &manifest, &[]).unwrap();
 
     let install = Scratch::new("tar-collision-install");
     tar::unpack(&archive_path, install.path(), "collisionmod", "0.1.0").unwrap();
@@ -201,7 +201,7 @@ fn rmbx_bundle_and_unpack_round_trip() {
     let archive = Scratch::new("rmbx-archive");
     let archive_path = archive.path().join("zipmod_0.1.0.rmbx");
 
-    rmbx::bundle(src.path(), src.path(), &archive_path, &manifest).unwrap();
+    rmbx::bundle(src.path(), src.path(), &archive_path, &manifest, &[]).unwrap();
     assert!(archive_path.is_file());
 
     let install = Scratch::new("rmbx-install");
@@ -224,7 +224,7 @@ fn rmbx_read_manifest_without_full_extraction() {
 
     let archive = Scratch::new("rmbx-readmanifest-archive");
     let archive_path = archive.path().join("peekmod_0.1.0.rmbx");
-    rmbx::bundle(src.path(), src.path(), &archive_path, &manifest).unwrap();
+    rmbx::bundle(src.path(), src.path(), &archive_path, &manifest, &[]).unwrap();
 
     let read_back = rmbx::read_manifest(&archive_path).unwrap();
     assert_eq!(read_back.name, "peekmod");
