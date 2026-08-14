@@ -5,7 +5,11 @@ use crate::carrier_toml::{CarrierToml, DEFAULT_CRAN_MIRROR};
 use crate::formats::{rmbx, tar};
 use crate::manifest::{Dependencies, Manifest};
 
-pub fn run(path: &str, use_rmbx: bool, binary: bool) -> Result<()> {
+pub fn run(path: &str, use_rmbx: bool, binary: bool, keep_source: bool) -> Result<()> {
+    if keep_source && !binary {
+        bail!("--keep-source only applies together with --binary.");
+    }
+
     let project_root = PathBuf::from(path);
 
     if !project_root.exists() {
@@ -27,12 +31,21 @@ pub fn run(path: &str, use_rmbx: bool, binary: bool) -> Result<()> {
 
     let manifest = build_manifest(&toml, &project_root, &src_path, built.as_deref())?;
 
-    // A plain bundle excludes any dev-built lib/ next to a native dir
-    // (from `carrier build`) — it isn't source and shouldn't leak into
-    // a portable source archive. `--binary` wants that lib/ included,
-    // since it's the artifact the whole point of this run is to ship.
+    // Three shapes:
+    //   - plain bundle: keep native source, drop any dev-built lib/
+    //     left over from `carrier build` — it isn't source and
+    //     shouldn't leak into a source-only archive.
+    //   - --binary alone: drop native source entirely, binary only.
+    //     A mismatched/missing tag on install has nothing to fall
+    //     back to and must error clearly (not yet implemented on the
+    //     install side — see the TODO on install.rs).
+    //   - --binary --keep-source: exclude nothing, ship both.
     let exclude: Vec<PathBuf> = if binary {
-        Vec::new()
+        if keep_source {
+            Vec::new()
+        } else {
+            toml.resolve_native_dirs(&project_root).unwrap_or_default()
+        }
     } else {
         toml.resolve_native_dirs(&project_root)
             .unwrap_or_default()

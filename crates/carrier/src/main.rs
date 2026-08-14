@@ -52,11 +52,17 @@ enum Commands {
         rmbx: bool,
 
         /// Also compile native code in place and include the tagged
-        /// binary in the archive alongside source. A mismatched or
-        /// missing tag on install falls back to compiling from the
-        /// source that ships in the same archive either way.
+        /// binary in the archive. Native source is stripped from the
+        /// archive unless --keep-source is also passed — a mismatched
+        /// or missing tag on install then has nothing to fall back to.
         #[arg(long)]
         binary: bool,
+
+        /// Only valid with --binary. Also ships native source
+        /// alongside the compiled binary, so install can fall back to
+        /// compiling if the tag doesn't match this machine.
+        #[arg(long)]
+        keep_source: bool,
     },
 
     /// Compile a module's native code in place for local dev/testing.
@@ -115,8 +121,8 @@ fn main() {
         Commands::Build { path } => {
             commands::build::run(BuildArgs { path })
         }
-        Commands::Bundle { path, rmbx, binary } => {
-            commands::bundle::run(BundleArgs { path, rmbx, binary })
+        Commands::Bundle { path, rmbx, binary, keep_source } => {
+            commands::bundle::run(BundleArgs { path, rmbx, binary, keep_source })
         }
         // Commands::Install { source, install_deps, repo, native } => {
         //     commands::install::run(InstallArgs { source, install_deps, repo, native })
