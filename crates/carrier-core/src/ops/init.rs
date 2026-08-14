@@ -56,9 +56,11 @@ pub fn run(
             files.push(format!("{}/{}", name, f));
         }
     } else {
-        fs::write(src_dir.join("__init__.R"), "#' @export\nbox::use()\n")
-        .context("Failed to write __init__.R")?;
-        files.push(format!("{}/__init__.R", name));
+        let scaffolded = carrier_native::scaffold::scaffold_pure_r(&src_dir)
+            .with_context(|| format!("Failed to scaffold R-only example code in {}", src_dir.display()))?;
+        for f in scaffolded {
+            files.push(format!("{}/{}", name, f));
+        }
     }
     // if let Some(lang) = native {
     //     let dir_name = carrier_native::scaffold::native_dir_name(lang);
