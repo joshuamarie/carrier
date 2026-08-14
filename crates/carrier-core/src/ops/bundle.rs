@@ -5,7 +5,7 @@ use crate::carrier_toml::{CarrierToml, DEFAULT_CRAN_MIRROR};
 use crate::formats::{rmbx, tar};
 use crate::manifest::{Dependencies, Manifest};
 
-pub fn run(path: &str, use_rmbx: bool) -> Result<()> {
+pub fn run(path: &str, use_rmbx: bool, binary: bool) -> Result<()> {
     let project_root = PathBuf::from(path);
 
     if !project_root.exists() {
@@ -18,7 +18,28 @@ pub fn run(path: &str, use_rmbx: bool) -> Result<()> {
     let toml = CarrierToml::from_dir(&project_root)?;
     let src_path = toml.resolve_src_dir(&project_root)?;
     let meta = &toml.module;
-    let manifest = build_manifest(&toml, &project_root, &src_path)?;
+
+    let built = if binary {
+        Some(crate::ops::build::run(&project_root)?)
+    } else {
+        None
+    };
+
+    let manifest = build_manifest(&toml, &project_root, &src_path, built.as_deref())?;
+
+    // A plain bundle excludes any dev-built lib/ next to a native dir
+    // (from `carrier build`) — it isn't source and shouldn't leak into
+    // a portable source archive. `--binary` wants that lib/ included,
+    // since it's the artifact the whole point of this run is to ship.
+    let exclude: Vec<PathBuf> = if binary {
+        Vec::new()
+    } else {
+        toml.resolve_native_dirs(&project_root)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|d| d.parent().map(|p| p.join("lib")))
+            .collect()
+    };
 
     let cwd = std::env::current_dir()
         .context("Failed to get current working directory")?;
@@ -27,10 +48,10 @@ pub fn run(path: &str, use_rmbx: bool) -> Result<()> {
     let output_path = cwd.join(format!("{}_{}.{}", meta.name, meta.version, ext));
 
     if use_rmbx {
-        rmbx::bundle(&src_path, &project_root, &output_path, &manifest)
+        rmbx::bundle(&src_path, &project_root, &output_path, &manifest, &exclude)
             .with_context(|| format!("Failed to bundle: {}", src_path.display()))?;
     } else {
-        tar::bundle(&src_path, &project_root, &output_path, &manifest)
+        tar::bundle(&src_path, &project_root, &output_path, &manifest, &exclude)
             .with_context(|| format!("Failed to bundle: {}", src_path.display()))?;
     }
 
@@ -49,16 +70,26 @@ pub fn bundle_to(project_root: &Path, output_path: &Path, use_rmbx: bool) -> Res
     let toml = CarrierToml::from_dir(project_root)?;
     let src_path = toml.resolve_src_dir(project_root)?;
 
-    let manifest = build_manifest(&toml, project_root, &src_path)?;
+    let manifest = build_manifest(&toml, project_root, &src_path, None)?;
+    let exclude: Vec<PathBuf> = toml.resolve_native_dirs(project_root)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|d| d.parent().map(|p| p.join("lib")))
+        .collect();
 
     if use_rmbx {
-        rmbx::bundle(&src_path, project_root, output_path, &manifest)
+        rmbx::bundle(&src_path, project_root, output_path, &manifest, &exclude)
     } else {
-        tar::bundle(&src_path, project_root, output_path, &manifest)
+        tar::bundle(&src_path, project_root, output_path, &manifest, &exclude)
     }
 }
 
-fn build_manifest(toml: &CarrierToml, project_root: &Path, src_path: &Path) -> Result<Manifest> {
+fn build_manifest(
+    toml: &CarrierToml,
+    project_root: &Path,
+    src_path: &Path,
+    built: Option<&[crate::ops::build::BuiltArtifact]>,
+) -> Result<Manifest> {
     let meta = &toml.module;
 
     // let files = crate::formats::rmbx::collect_files(src_path)
@@ -100,7 +131,7 @@ fn build_manifest(toml: &CarrierToml, project_root: &Path, src_path: &Path) -> R
     let lock = crate::lockfile::read(project_root)
         .with_context(|| format!("Failed to read carrier.lock in {}", project_root.display()))?;
 
-    Ok(Manifest::new(
+    let mut manifest = Manifest::new(
         &meta.name,
         &meta.version,
         &meta.description,
@@ -111,5 +142,43 @@ fn build_manifest(toml: &CarrierToml, project_root: &Path, src_path: &Path) -> R
         files,
         lock.map(|l| l.packages),
         toml.test.clone(),
-    ))
+    );
+
+    if let Some(artifacts) = built {
+        let build_deps = toml.native.as_ref()
+            .and_then(|n| n.build_deps.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, dep)| crate::manifest::PackageDepEntry {
+                name,
+                version: dep.version().to_owned(),
+                repo: if dep.repo() == DEFAULT_CRAN_MIRROR { None } else { Some(dep.repo().to_owned()) },
+            })
+            .collect();
+
+        // One archive can have multiple native dirs; use the first
+        // build's source_hash as the manifest-level informational
+        // hash, same as a single-native-dir module always would.
+        let source_hash = artifacts.first()
+            .map(|a| a.source_hash.clone())
+            .unwrap_or_default();
+
+        let native_artifacts = artifacts.iter().map(|a| {
+            let rel = a.artifact_path.strip_prefix(src_path).unwrap_or(&a.artifact_path);
+            crate::manifest::NativeArtifact {
+                target_triple: a.target_triple.clone(),
+                r_version: a.r_version.clone(),
+                source_hash: a.source_hash.clone(),
+                artifact: rel.to_string_lossy().replace('\\', "/"),
+            }
+        }).collect();
+
+        manifest = manifest.with_native(crate::manifest::NativeManifest {
+            build_deps,
+            source_hash,
+            artifacts: native_artifacts,
+        });
+    }
+
+    Ok(manifest)
 }
