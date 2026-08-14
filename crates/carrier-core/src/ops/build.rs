@@ -18,6 +18,10 @@ use crate::carrier_toml::CarrierToml;
 /// Uses `resolve_native_dirs()`, not a raw scan, so an explicit
 /// `[native].path`/`paths` override in carrier.toml is respected the
 /// same way `install` and `bundle` already respect it.
+///
+/// Excluding this dev-built `lib/` from a plain source bundle is a
+/// separate, still-open concern in `formats/tar.rs` and `formats/rmbx.rs`
+/// — not handled here.
 pub fn run(project_root: &Path) -> Result<Vec<BuiltArtifact>> {
     if !project_root.join("carrier.toml").exists() {
         bail!(
@@ -55,6 +59,9 @@ pub fn run(project_root: &Path) -> Result<Vec<BuiltArtifact>> {
         built.push(BuiltArtifact {
             native_dir: native_dir.clone(),
             artifact_path: outcome.artifact_path,
+            target_triple: outcome.target_triple,
+            r_version: outcome.r_version,
+            source_hash: outcome.source_hash,
             from_cache: outcome.from_cache,
         });
     }
@@ -65,5 +72,8 @@ pub fn run(project_root: &Path) -> Result<Vec<BuiltArtifact>> {
 pub struct BuiltArtifact {
     pub native_dir: PathBuf,
     pub artifact_path: PathBuf,
+    pub target_triple: String,
+    pub r_version: String,
+    pub source_hash: String,
     pub from_cache: bool,
 }
