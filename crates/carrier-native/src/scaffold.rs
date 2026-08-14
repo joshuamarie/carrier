@@ -44,6 +44,27 @@ fn template_for(lang: NativeLang, backend: Option<Backend>) -> Result<Template> 
     }
 }
 
+/// Scaffold a module's R-only example code — the same hello/add shape
+/// `scaffold()` writes for native modules, minus anything compiled: no
+/// native dir, no hook.r, no dyn.load. Function bodies live entirely
+/// in R. Used by `carrier init` when `--native` isn't passed, so a
+/// fresh module starts from working, runnable examples instead of an
+/// empty `box::use()`.
+pub fn scaffold_pure_r(module_dir: &Path) -> Result<Vec<String>> {
+    std::fs::write(module_dir.join("hello.r"), r_glue::HELLO_PURE)
+        .context("Failed to write hello.r")?;
+    std::fs::write(module_dir.join("add.r"), r_glue::ADD_PURE)
+        .context("Failed to write add.r")?;
+    std::fs::write(module_dir.join("__init__.r"), r_glue::INIT)
+        .context("Failed to write __init__.r")?;
+
+    Ok(vec![
+        "hello.r".to_string(),
+        "add.r".to_string(),
+        "__init__.r".to_string(),
+    ])
+}
+
 /// Folder name for a module's native source. The language's own name,
 /// not a generic `src/` — `find_native_dirs` detects by `Makevars`
 /// presence, not by folder name, so this is free to be descriptive.
