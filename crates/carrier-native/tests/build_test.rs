@@ -145,7 +145,7 @@ fn builds_caches_and_loads_stats_native() {
         native_dir.display()
     );
 
-    let first = carrier_native::build(&module_dir, &native_dir, "stats_native")
+    let first = carrier_native::build(&module_dir, &native_dir, "stats_native", "stats_native")
         .expect("first build() should succeed");
     assert!(
         first.artifact_path.exists(),
@@ -155,7 +155,7 @@ fn builds_caches_and_loads_stats_native() {
 
     // Re-running build() with unchanged source should hit the cache,
     // not invoke R CMD SHLIB again.
-    let second = carrier_native::build(&module_dir, &native_dir, "stats_native")
+    let second = carrier_native::build(&module_dir, &native_dir, "stats_native", "stats_native")
         .expect("second build() should succeed");
     assert!(second.from_cache, "second build() should be a cache hit");
     assert_eq!(
