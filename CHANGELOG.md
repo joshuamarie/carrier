@@ -4,13 +4,13 @@
 
 # v0.1.3
 
+## Fixes
+
 -   `r_version` in `carrier.toml` is now an enforced constraint, not a decorative string. It's parsed through the same version-spec syntax as `package_deps`/`module_deps` (`>=4.4.0`, `^4.4.0`, ranges), and checked against the R currently on `PATH`.
 
     -   Checked at `carrier lock` and `carrier install` time. A mismatch is a hard error.
 
 -   `carrier.lock` now records the R version that produced it, as provenance.
-
-    -   Additive field — existing locks without it still parse fine, no lock format version bump needed.
 
 -   Scaffolded `carrier.toml` templates now default to `r_version = ">=4.0.0"` instead of a bare `"4.0.0"`, so new modules declare a floor instead of an ambiguous, unenforced string.
 
