@@ -4,8 +4,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use commands::{
-    build::BuildArgs,
     bundle::BundleArgs,
+    compile::CompileArgs,
     init::InitArgs,
     install::InstallArgs,
     lock::LockArgs,
@@ -68,7 +68,7 @@ enum Commands {
     /// Compile a module's native code in place for local dev/testing.
     /// Does not delete the native source, unlike the build step that
     /// runs during `install`.
-    Build {
+    Compile {
         /// Path to the project root (e.g. `.` or `./my-project`)
         path: String,
     },
@@ -118,8 +118,8 @@ fn main() {
         Commands::Init { name, dir_name, native, backend } => {
             commands::init::run(InitArgs { name, dir_name, native, backend })
         }
-        Commands::Build { path } => {
-            commands::build::run(BuildArgs { path })
+        Commands::Compile { path } => {
+            commands::compile::run(CompileArgs { path })
         }
         Commands::Bundle { path, rmbx, binary, keep_source } => {
             commands::bundle::run(BundleArgs { path, rmbx, binary, keep_source })

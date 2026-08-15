@@ -24,7 +24,7 @@ pub fn run(path: &str, use_rmbx: bool, binary: bool, keep_source: bool) -> Resul
     let meta = &toml.module;
 
     let built = if binary {
-        Some(crate::ops::build::run(&project_root)?)
+        Some(crate::ops::compile::run(&project_root)?)
     } else {
         None
     };
@@ -97,7 +97,7 @@ fn build_manifest(
     toml: &CarrierToml,
     project_root: &Path,
     src_path: &Path,
-    built: Option<&[crate::ops::build::BuiltArtifact]>,
+    built: Option<&[crate::ops::compile::CompiledArtifact]>,
 ) -> Result<Manifest> {
     let meta = &toml.module;
 

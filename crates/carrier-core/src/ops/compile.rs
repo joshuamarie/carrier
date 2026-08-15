@@ -4,13 +4,13 @@ use std::path::{Path, PathBuf};
 use crate::carrier_toml::CarrierToml;
 
 /// Compile a module's native code in place, directly into its own
-/// source directory. This tries to mirror `devtools::load_all()`'s 
+/// source directory. This tries to mirror `devtools::load_all()`'s
 /// convention of building `src/*.so` right where the source lives, for fast
 /// dev-loop iteration against a running R session.
 ///
 /// Unlike `install`'s `build_native_if_present`, this never deletes
 /// the native source dir afterward: the whole point of `carrier
-/// build` is to keep iterating on that source. Each artifact lands at
+/// compile` is to keep iterating on that source. Each artifact lands at
 /// `<native_dir_parent>/lib/<native_dir_name><dynlib_ext>`, exactly
 /// where `box::file()` in the scaffolded hook already expects it, so
 /// no change to `r_glue.rs` is required.
@@ -21,8 +21,8 @@ use crate::carrier_toml::CarrierToml;
 ///
 /// Excluding this dev-built `lib/` from a plain source bundle is a
 /// separate, still-open concern in `formats/tar.rs` and `formats/rmbx.rs`
-/// — not handled here.
-pub fn run(project_root: &Path) -> Result<Vec<BuiltArtifact>> {
+/// (not handled here).
+pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
     if !project_root.join("carrier.toml").exists() {
         bail!(
             "No carrier.toml found in {}. Is this a carrier module project?",
@@ -38,7 +38,7 @@ pub fn run(project_root: &Path) -> Result<Vec<BuiltArtifact>> {
         return Ok(Vec::new());
     }
 
-    let mut built = Vec::new();
+    let mut compiled = Vec::new();
     for native_dir in &native_dirs {
         if !native_dir.is_dir() {
             bail!(
@@ -54,9 +54,9 @@ pub fn run(project_root: &Path) -> Result<Vec<BuiltArtifact>> {
             .unwrap_or(&name);
 
         let outcome = carrier_native::build(target_dir, native_dir, artifact_name, &name)
-            .with_context(|| format!("Failed to build native code for '{}' at {}", name, native_dir.display()))?;
+            .with_context(|| format!("Failed to compile native code for '{}' at {}", name, native_dir.display()))?;
 
-        built.push(BuiltArtifact {
+        compiled.push(CompiledArtifact {
             native_dir: native_dir.clone(),
             artifact_path: outcome.artifact_path,
             target_triple: outcome.target_triple,
@@ -66,10 +66,10 @@ pub fn run(project_root: &Path) -> Result<Vec<BuiltArtifact>> {
         });
     }
 
-    Ok(built)
+    Ok(compiled)
 }
 
-pub struct BuiltArtifact {
+pub struct CompiledArtifact {
     pub native_dir: PathBuf,
     pub artifact_path: PathBuf,
     pub target_triple: String,

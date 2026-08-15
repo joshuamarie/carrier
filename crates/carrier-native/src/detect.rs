@@ -9,7 +9,7 @@ use std::path::Path;
 /// invisible to carrier just for skipping a file it doesn't strictly
 /// need. Deliberately filesystem-only, no dependency on
 /// `carrier-core`'s TOML types, so this crate can be driven directly
-/// against a bare directory, by tests, or by a future `carrier build`
+/// against a bare directory, by tests, or by a future `carrier compile`
 /// run outside a full resolve.
 ///
 /// Nothing here assumes a folder is named `src/`, or that it sits
