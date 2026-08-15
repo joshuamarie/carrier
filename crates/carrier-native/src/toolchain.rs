@@ -70,7 +70,7 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str, cache_key_
     let hash = source_hash(native_dir)?;
 
     let lib_name = format!("{module_name}{ext}");
-    let lib_dir = module_dir.join("lib");
+    let lib_dir = module_dir.join(".lib");
     std::fs::create_dir_all(&lib_dir)
         .with_context(|| format!("Failed to create {}", lib_dir.display()))?;
     let artifact_path = lib_dir.join(&lib_name);
