@@ -28,6 +28,7 @@ pub fn bundle(
     output_path: &Path,
     manifest: &Manifest,
     exclude: &[PathBuf],
+    force_include: &[PathBuf],
 ) -> Result<()> {
     let file = File::create(output_path)
         .with_context(|| format!("Failed to create: {}", output_path.display()))?;
@@ -37,7 +38,7 @@ pub fn bundle(
 
     let top = format!("{}_{}", manifest.name, manifest.version);
 
-    for entry in all_files(src_path, exclude) {
+    for entry in all_files(src_path, exclude, force_include) {
         let rel = entry
             .strip_prefix(src_path)
             .with_context(|| format!("Failed to strip prefix from {}", entry.display()))?;
@@ -225,7 +226,7 @@ pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
 }
 
 pub fn collect_files(base: &Path) -> Result<Vec<String>> {
-    all_files(base, &[])
+    all_files(base, &[], &[])
         .iter()
         .map(|p| {
             p.strip_prefix(base)
@@ -241,14 +242,15 @@ fn strip_top_level(path: &Path) -> Result<PathBuf> {
     Ok(components.as_path().to_path_buf())
 }
 
-fn all_files(base: &Path, exclude: &[PathBuf]) -> Vec<PathBuf> {
+fn all_files(base: &Path, exclude: &[PathBuf], force_include: &[PathBuf]) -> Vec<PathBuf> {
     walkdir::WalkDir::new(base)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .filter(|e| !exclude.iter().any(|ex| e.path().starts_with(ex)))
         .filter(|e| {
-            e.path()
+            let forced = force_include.iter().any(|f| e.path().starts_with(f));
+            forced || e.path()
                 .strip_prefix(base)
                 .unwrap_or(e.path())
                 .components()
