@@ -65,7 +65,7 @@ fn scaffold_hook_dyn_load_uses_native_dir_name() {
     let scratch = TempScratchDir::new("scaffold-hook-name");
     scaffold::scaffold(scratch.path(), NativeLang::Cpp, Some(Backend::Cpp11)).unwrap();
     let hook = std::fs::read_to_string(scratch.path().join("hook.r")).unwrap();
-    assert!(hook.contains("\"lib/cpp\""));
+    assert!(hook.contains("\".lib/cpp\""));
 }
 
 #[test]
