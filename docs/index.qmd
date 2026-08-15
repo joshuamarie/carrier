@@ -23,8 +23,8 @@ convert-proj/
 
 - `init` (Optional): scaffold a new module with a `carrier.toml` and an `__init__.R` entry point.
 - `bundle`: package a module in a `.tar.gz` archive, with a `manifest.json` built from `carrier.toml`. *Disclaimer: There's `.rmbx` format which is something similar to `.whl` in Python and it hasn't finalized, yet (it is planned to be scrapped, making the `.tar.gz` as the main archive format).*
-- `install`: install a bundled archive, a local module directory, or a module living in a GitHub repo (`gh:user/repo`), and optionally resolve its R package dependencies from CRAN.
-- `lock`: resolve a module's R package dependencies to exact versions and write `carrier.lock`, so a later install reuses those pins instead of re-resolving against CRAN.
+- `install`: install a bundled archive, a local module directory, or a module living in a GitHub repo (`gh:user/repo`), and optionally resolve its R package dependencies from CRAN. Checks the installed R against the module's declared `r_version` constraint before proceeding.
+- `lock`: resolve a module's R package dependencies to exact versions and write `carrier.lock`, so a later install reuses those pins instead of re-resolving against CRAN. Also checks `r_version` and records the resolving R version in the lock.
 - `remove`: uninstall a module.
 
 ## Primary Application
