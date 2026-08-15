@@ -31,27 +31,28 @@ pub fn run(path: &str, use_rmbx: bool, binary: bool, keep_source: bool) -> Resul
 
     let manifest = build_manifest(&toml, &project_root, &src_path, built.as_deref())?;
 
-    // Three shapes:
-    //   - plain bundle: keep native source, drop any dev-built lib/
-    //     left over from `carrier build` — it isn't source and
-    //     shouldn't leak into a source-only archive.
-    //   - --binary alone: drop native source entirely, binary only.
-    //     A mismatched/missing tag on install has nothing to fall
-    //     back to and must error clearly (not yet implemented on the
-    //     install side — see the TODO on install.rs).
-    //   - --binary --keep-source: exclude nothing, ship both.
-    let exclude: Vec<PathBuf> = if binary {
-        if keep_source {
+    // .lib/ is now dot-prefixed, so the archive writer's own
+    // hidden-file filter excludes it from a plain bundle automatically
+    // — no explicit exclusion needed there anymore. --binary needs the
+    // opposite: force it back in despite the dot, since shipping it is
+    // the whole point. --binary without --keep-source additionally
+    // excludes native source; a mismatched/missing tag on install then
+    // has nothing to fall back to and must error clearly (not yet
+    // implemented on the install side — see the TODO on install.rs).
+    let (exclude, force_include): (Vec<PathBuf>, Vec<PathBuf>) = if binary {
+        let lib_dirs: Vec<PathBuf> = toml.resolve_native_dirs(&project_root)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|d| d.parent().map(|p| p.join(".lib")))
+            .collect();
+        let src_exclude = if keep_source {
             Vec::new()
         } else {
             toml.resolve_native_dirs(&project_root).unwrap_or_default()
-        }
+        };
+        (src_exclude, lib_dirs)
     } else {
-        toml.resolve_native_dirs(&project_root)
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|d| d.parent().map(|p| p.join("lib")))
-            .collect()
+        (Vec::new(), Vec::new())
     };
 
     let cwd = std::env::current_dir()
@@ -61,10 +62,10 @@ pub fn run(path: &str, use_rmbx: bool, binary: bool, keep_source: bool) -> Resul
     let output_path = cwd.join(format!("{}_{}.{}", meta.name, meta.version, ext));
 
     if use_rmbx {
-        rmbx::bundle(&src_path, &project_root, &output_path, &manifest, &exclude)
+        rmbx::bundle(&src_path, &project_root, &output_path, &manifest, &exclude, &force_include)
             .with_context(|| format!("Failed to bundle: {}", src_path.display()))?;
     } else {
-        tar::bundle(&src_path, &project_root, &output_path, &manifest, &exclude)
+        tar::bundle(&src_path, &project_root, &output_path, &manifest, &exclude, &force_include)
             .with_context(|| format!("Failed to bundle: {}", src_path.display()))?;
     }
 
@@ -84,16 +85,11 @@ pub fn bundle_to(project_root: &Path, output_path: &Path, use_rmbx: bool) -> Res
     let src_path = toml.resolve_src_dir(project_root)?;
 
     let manifest = build_manifest(&toml, project_root, &src_path, None)?;
-    let exclude: Vec<PathBuf> = toml.resolve_native_dirs(project_root)
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|d| d.parent().map(|p| p.join("lib")))
-        .collect();
 
     if use_rmbx {
-        rmbx::bundle(&src_path, project_root, output_path, &manifest, &exclude)
+        rmbx::bundle(&src_path, project_root, output_path, &manifest, &[], &[])
     } else {
-        tar::bundle(&src_path, project_root, output_path, &manifest, &exclude)
+        tar::bundle(&src_path, project_root, output_path, &manifest, &[], &[])
     }
 }
 
