@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use carrier_native::detect::find_native_dirs;
 use carrier_native::{Backend, NativeLang};
 
+use crate::version::VersionSpec;
+
 pub const DEFAULT_CRAN_MIRROR: &str = "https://cloud.r-project.org";
 
 // ---- Author ----
@@ -181,6 +183,12 @@ pub struct ModuleMeta {
     pub src: Option<String>,
 }
 
+impl ModuleMeta {
+    pub fn r_version_spec(&self) -> Result<VersionSpec> {
+        VersionSpec::parse(&self.r_version)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestConfig {
     pub framework: String,
@@ -325,7 +333,7 @@ authors = [
     {{ name = "Your Name", email = "you@example.com" }},
 ]
 license = "Unknown"
-r_version = "4.0.0"
+r_version = ">=4.0.0"
 # src = "{name}"    # path to the source directory containing __init__.R
                     # defaults to a directory named after the module
 

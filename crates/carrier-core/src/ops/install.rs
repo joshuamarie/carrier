@@ -136,6 +136,9 @@ fn install_from_rmbx(rmbx_path: &PathBuf, install_deps: bool) -> Result<()> {
     let manifest = rmbx::read_manifest(rmbx_path)
         .with_context(|| format!("Failed to read manifest from {}", rmbx_path.display()))?;
 
+    let r_spec = crate::version::VersionSpec::parse(&manifest.r_version)?;
+    crate::version::check_r_version(&r_spec)?;
+
     let name = manifest.name.clone();
     let version = manifest.version.clone();
     let install_dir = resolve_install_dir()?;
@@ -203,6 +206,10 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&Carrie
 
     let toml = tar::read_toml(tar_path)
         .with_context(|| format!("Failed to read manifest from {}", tar_path.display()))?;
+
+    let r_spec = toml.module.r_version_spec()?;
+    crate::version::check_r_version(&r_spec)?;
+
     let name = toml.module.name.clone();
     let version = toml.module.version.clone();
 

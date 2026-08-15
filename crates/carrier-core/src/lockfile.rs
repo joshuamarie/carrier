@@ -26,6 +26,8 @@ pub struct LockedPackage {
 pub struct CarrierLock {
     #[serde(default = "default_version")]
     pub version: u32,
+    #[serde(default)]
+    pub r_version: Option<String>,
     #[serde(default, rename = "package")]
     pub packages: Vec<LockedPackage>,
 }
@@ -39,7 +41,7 @@ impl CarrierLock {
     /// reconstructing a lock from a bundle's embedded manifest, where
     /// there is no carrier.lock file on disk to read.
     pub fn from_packages(packages: Vec<LockedPackage>) -> Self {
-        Self { version: LOCK_FORMAT_VERSION, packages }
+        Self { version: LOCK_FORMAT_VERSION, r_version: None, packages }
     }
 
     /// Look up a locked package by name and return its exact version,
@@ -96,6 +98,7 @@ pub fn read(project_root: &Path) -> Result<Option<CarrierLock>> {
 pub fn write(
     project_root: &Path,
     resolved: &BTreeMap<String, (Version, String)>,
+    r_version: &str,
 ) -> Result<()> {
     let mut packages: Vec<LockedPackage> = resolved
         .iter()
@@ -109,6 +112,7 @@ pub fn write(
 
     let lock = CarrierLock {
         version: LOCK_FORMAT_VERSION,
+        r_version: Some(r_version.to_owned()),
         packages,
     };
     let contents = toml::to_string_pretty(&lock).context("Failed to serialize carrier.lock")?;

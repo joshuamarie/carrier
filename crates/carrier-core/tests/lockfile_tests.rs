@@ -21,7 +21,7 @@ fn write_then_read_round_trips() {
         (Version::parse("1.3.0").unwrap(), "https://cloud.r-project.org".to_owned()),
     );
 
-    write(dir.path(), &resolved).unwrap();
+    write(dir.path(), &resolved, "4.4.0").unwrap();
     let lock = read(dir.path()).unwrap().expect("lock should exist after write");
 
     let (version, repo) = lock.locked_version("purrr").unwrap().unwrap();
@@ -32,7 +32,7 @@ fn write_then_read_round_trips() {
 #[test]
 fn locked_version_is_none_for_an_unlisted_package() {
     let dir = tempfile::tempdir().unwrap();
-    write(dir.path(), &BTreeMap::new()).unwrap();
+    write(dir.path(), &BTreeMap::new(), "4.4.0").unwrap();
     let lock = read(dir.path()).unwrap().unwrap();
     assert!(lock.locked_version("nonexistent").unwrap().is_none());
 }
@@ -89,7 +89,7 @@ fn written_packages_are_sorted_for_a_stable_diff() {
     resolved.insert("zzz_pkg".to_owned(), (Version::parse("1.0.0").unwrap(), "repo".to_owned()));
     resolved.insert("aaa_pkg".to_owned(), (Version::parse("1.0.0").unwrap(), "repo".to_owned()));
 
-    write(dir.path(), &resolved).unwrap();
+    write(dir.path(), &resolved, "4.4.0").unwrap();
     let contents = std::fs::read_to_string(dir.path().join(LOCK_FILE_NAME)).unwrap();
     let aaa_pos = contents.find("aaa_pkg").unwrap();
     let zzz_pos = contents.find("zzz_pkg").unwrap();

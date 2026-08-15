@@ -12,21 +12,23 @@ The file is TOML. Format version is currently `1`:
 
 ``` toml
 version = 1
+r_version = "4.2.0"
 
 [[package]]
 name = "dplyr"
-version = "1.2.0"
+version = "1.1.3"
 repo = "https://cloud.r-project.org"
 
 [[package]]
 name = "rlang"
-version = "1.3.0"
+version = "1.2.0"
 repo = "https://cloud.r-project.org"
 ```
 
 | Field | Meaning |
 |-------|---------|
 | `version` | Lock *format* version (not a package version). Defaults to `1` if omitted when reading. |
+| `r_version` | The R version that produced this lock, e.g. `"4.5.1"`. Optional — absent on locks written before this field existed. Provenance only; the constraint actually enforced lives in `carrier.toml`'s `r_version` field, checked separately at lock and install time (see below). |
 | `[[package]]` | One entry per pinned R package. Entries are written sorted by `name` so the file stays stable and diffable. |
 | `name` | Package name as it appears on the repo. |
 | `version` | Exact semver string carrier resolved (e.g. `"1.2.2"`). |
@@ -56,6 +58,12 @@ When `carrier.lock` is present in the project root:
 - Packages not in the lock (for example a dependency you just added to `carrier.toml`) are still resolved fresh.
 
 Absence of the file is not an error: carrier simply resolves the way it always has. A present but unreadable or malformed lock **is** an error — a lock the tool cannot trust is worse than no lock at all.
+
+## R version
+
+`carrier.toml`'s `module.r_version` is a version constraint, written the same way as `package_deps`/`module_deps` (`">=4.4.0"`, `"^4.4.0"`, a range). Both `carrier lock` and `carrier install` detect the R currently on `PATH` and check it against that constraint before doing anything else. A version that doesn't satisfy it throws an error, a hard error, not a warning.
+
+This is separate from `carrier.lock`'s `r_version` field. The lock's field only records *what R produced this lock* — provenance, not a second constraint. The thing actually enforced on every run is always `carrier.toml`'s declared floor, checked against whatever R is installed right now. Write `r_version` as a floor (`">=4.4.0"`), not an exact pin. When we say "exact pin", this means only people on that exact R version can install the module at all.
 
 ## Design notes
 

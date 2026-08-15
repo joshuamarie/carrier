@@ -73,6 +73,25 @@ pub fn detect_r_platform() -> Result<RPlatform> {
     Ok(RPlatform { os, r_version_short, arch })
 }
 
+/// Detect the full major.minor.patch version of the R currently on
+/// PATH, for comparing against a module's `r_version` constraint.
+/// Deliberately separate from `detect_r_platform`'s `r_version_short`,
+/// which truncates to major.minor for CRAN binary path construction —
+/// a different concern with a different required precision.
+pub fn detect_r_version() -> Result<semver::Version> {
+    let output = std::process::Command::new("Rscript")
+        .args(["-e", "cat(as.character(getRversion()))"])
+        .output()
+        .context("Failed to run Rscript to detect R version — is R installed and on PATH?")?;
+
+    let stdout = String::from_utf8(output.stdout)
+        .context("Rscript output was not valid UTF-8")?;
+    let trimmed = stdout.trim();
+
+    semver::Version::parse(trimmed)
+        .with_context(|| format!("Could not parse R version from Rscript output: '{trimmed}'"))
+}
+
 /// Resolves the R user library path where R packages should be installed.
 ///
 /// Priority:
