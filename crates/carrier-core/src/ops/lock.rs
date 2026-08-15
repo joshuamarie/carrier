@@ -19,12 +19,16 @@ pub fn run(path: &str, update: bool) -> Result<()> {
     let toml: CarrierToml = ::toml::from_str(&contents)
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
 
+    let r_spec = toml.module.r_version_spec()?;
+    crate::version::check_r_version(&r_spec)?;
+    let detected = crate::paths::detect_r_version()?;
+
     let existing = if update { None } else { lockfile::read(project_root)? };
 
     let plan = resolve::resolve(&toml.package_deps, &toml.module_deps)?;
     let resolved = resolve::resolve_only(&plan, existing.as_ref())?;
 
-    lockfile::write(project_root, &resolved.into_iter().collect())?;
+    lockfile::write(project_root, &resolved.into_iter().collect(), &detected.to_string())?;
     println!("Wrote {} ({} packages)", lockfile::LOCK_FILE_NAME, plan_len(&plan));
 
     Ok(())

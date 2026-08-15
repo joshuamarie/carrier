@@ -49,6 +49,20 @@ pub fn check_conflicts(name: &str, specs: &[VersionSpec], candidates: &[Version]
     Ok(())
 }
 
+/// Verify the R currently on PATH satisfies `spec`. Called at install
+/// and lock time — this is the one place a version mismatch has to
+/// fail loudly instead of letting a module load under an R it was
+/// never declared compatible with.
+pub fn check_r_version(spec: &VersionSpec) -> Result<()> {
+    let detected = crate::paths::detect_r_version()?;
+    if !spec.matches(&detected) {
+        bail!(
+            "Installed R is {detected}, but this module requires r_version = \"{spec}\"."
+        );
+    }
+    Ok(())
+}
+
 impl std::fmt::Display for VersionSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
