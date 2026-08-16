@@ -83,11 +83,19 @@ pub fn resolve_locked(
     let empty = BTreeMap::new();
     let declared = package_deps.as_ref().unwrap_or(&empty);
 
-    for name in declared.keys() {
-        if !lock.packages.iter().any(|locked| &locked.name == name) {
+    for (name, dep) in declared {
+        let Some(locked) = lock.packages.iter().find(|locked| &locked.name == name) else {
             bail!(
-                "'{name}' is declared in carrier.toml but missing from carrier.lock — \
-                 the lock is stale. Run `carrier lock --update` and commit the result."
+                "'{name}' is declared in carrier.toml but missing from carrier.lock. \
+                 The lock is stale. Run `carrier lock --update` and commit the result."
+            );
+        };
+        if dep.repo() != locked.repo {
+            bail!(
+                "'{name}' repo changed in carrier.toml ({} -> {}) but carrier.lock \
+                 still pins the old one. Run `carrier lock --update` and commit the result.",
+                locked.repo,
+                dep.repo()
             );
         }
     }
