@@ -118,7 +118,10 @@ pub fn write(
     let contents = toml::to_string_pretty(&lock).context("Failed to serialize carrier.lock")?;
 
     let path = project_root.join(LOCK_FILE_NAME);
-    std::fs::write(&path, contents)
-        .with_context(|| format!("Failed to write {}", path.display()))?;
+    let tmp_path = path.with_extension("lock.tmp");
+    std::fs::write(&tmp_path, &contents)
+        .with_context(|| format!("Failed to write {}", tmp_path.display()))?;
+    std::fs::rename(&tmp_path, &path)
+        .with_context(|| format!("Failed to finalize {}", path.display()))?;
     Ok(())
 }
