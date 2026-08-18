@@ -2,6 +2,8 @@
 
 # Development version
 
+## What's new
+
 -   Compiled code support: a module can now declare `[native]` in `carrier.toml` to ship C, C++, Rcpp, Rust, or Fortran code alongside its R source.
 
     -   `carrier install` automatically compiles a module's native code as part of installing it — no manual build step. Compiled artifacts are cached locally (`~/.carrier/native-cache/`), keyed by source contents, platform, and R version, so unchanged code isn't recompiled on every install.
@@ -21,6 +23,16 @@
             path = "native/"
             build_deps = { Rcpp = "*" }
             ```
+
+## Fixes
+
+-  `r_version` from `carrier.toml` is now active, as the toolchain to build the binaries depends on the R platform version.
+
+-  `carrier.lock` now handle external dependencies on the native compiled codes.
+
+-  `carrier` now atomically writes `carrier.lock` lockfile via temp file + rename
+
+-  `carrier` will fail when `carrier.toml` repo drifts from `carrier.lock`
 
 # v0.1.3
 
