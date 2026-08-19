@@ -1,4 +1,4 @@
-mod commands; 
+pub mod commands; 
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -111,7 +111,7 @@ enum Commands {
     },
 }
 
-fn main() {
+pub fn run() {
     let cli = Cli::parse();
 
     let result: Result<()> = match cli.command {

@@ -1,12 +1,21 @@
 [package]
-name = "carrier"
+name = "carrier-cli"
 version.workspace = true
 edition.workspace = true
 description = "A bundler and package manager for box modules"
+default-run = "carrier"
+
+[lib]
+name = "carrier_cli"
+path = "src/lib.rs"
 
 [[bin]]
 name = "carrier"
-path = "src/main.rs"
+path = "src/bin/carrier.rs"
+
+# [[bin]]
+# name = "crr"
+# path = "src/bin/crr.rs"
 
 [dependencies]
 carrier-core = { path = "../carrier-core", features = ["network"] }
