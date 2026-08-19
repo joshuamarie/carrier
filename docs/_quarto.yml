@@ -27,6 +27,8 @@ website:
                     text: carrier.lock
                   - href: reference/module-structure.qmd
                     text: Module Structure
+                  - href: reference/native-code.qmd
+                    text: Handling native codes
             - text: Internals
               menu:
                   - href: internals/architecture.qmd
@@ -47,6 +49,7 @@ website:
               - reference/carrier-toml.qmd
               - reference/carrier-lock.qmd
               - reference/module-structure.qmd
+              - reference/native-code.qmd
         - title: Internals
           contents:
               - internals/architecture.qmd

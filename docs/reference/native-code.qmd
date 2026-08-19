@@ -1,0 +1,150 @@
+---
+title: "Handling native codes"
+---
+
+Regular R packages handle compiled code well. The same is true for `{box}` modules (see the [box vignette on compiled code](https://klmr.me/box/articles/compiled-code.html)), though that article also documents the limitations you should be aware of.
+
+`{carrier}` modules can contain native code (C, C++, …) that is built with `R CMD SHLIB` and loaded at runtime via `dyn.load()`. The design deliberately mirrors the conventions R package authors already know, while fitting the flat, `{box}`-style module layout that carrier uses.
+
+One practical difference from classic R packages: you are not forced to put native sources in a directory named `src/`. Any directory name is fine, as long as carrier can find it—either by automatic discovery or by an explicit `[native]` entry (see [Directory conventions](#directory-conventions)).
+
+## Enabling native code in a module
+
+`{carrier}` has a prepared scaffolding when building modules with native compiled codes. Two ways to get there:
+
+1.  `carrier init <module-name> --native <lang>` on a fresh module. This scaffolds working example code (`hello_world`/`add`) in both the compiled language and R, already wired together.
+
+2.  Either drop sources into a directory that carrier will discover automatically, or add a `[native]` block to `carrier.toml`. You do not need the `[native]` block at all if the sources live under a discoverable directory and you have no build-time R package dependencies.
+
+## Supported languages and backends
+
+| Language | Value(s) accepted     | Status                   |
+|----------|-----------------------|--------------------------|
+| C        | `c`                   | Supported                |
+| C++      | `cpp`, `c++`, `cxx`   | Supported (two backends) |
+| FORTRAN  | `fortran`, `f90`, `f` | Not yet supported        |
+
+C++ has two backends, chosen independently of language:
+
+| Backend | Value | Notes |
+|------------------------|------------------------|------------------------|
+| Rcpp | `rcpp` (default) | `PKG_CXXFLAGS`/`PKG_LIBS` pulled from `Rcpp:::CxxFlags()`/`Rcpp:::LdFlags()` at build time |
+| cpp11 | `cpp11` | Header-only; `PKG_CPPFLAGS` points at the installed cpp11 headers, `CXX_STD = CXX11` |
+
+::: {.callout-note title="Rcpp"}
+The `{Rcpp}` scaffold therefore begins `hook.r` with `box::use(Rcpp[...])` so the package is available when the shared library is loaded.
+:::
+
+## The `[native]` block {#native-block}
+
+When building a package out of `{box}` modules handled with `{carrier}`, you must have the following lines on the `carrier.toml`:
+
+``` toml
+[native]
+path = "cpp/"
+# paths = ["cpp/"]
+build_deps = { Rcpp = "*" }
+```
+
+Explanation:
+
+-   There's a parameter to configure the path you want to compile relative to the source directory of the module. There are two ways to manifest the path to compile:
+
+    1.  `path`, where this module's native source lives, relative to the module's own resolved source directory (the same base `[module].src`uses), not the project root where `carrier.toml` lives.
+
+    2.  `paths`, same idea, for a module with more than one native-code location, e.g. `paths = ["cpp", "extra/src"]`.
+
+    When neither it set, `carrier` scans the module's whole source tree and treats every qualifying directory as its own native dir (see below). You don't need `[native]` at all if your compiled code just lives under `src/` with no build-time R package deps.
+
+-   `build_deps`, is a parameter to configure the external dependencies, most possibly R packages, needed only to *compile* (e.g. `Rcpp`, `cpp11`, whatever `Makevars` needs via `system.file()`). This does not imply a runtime dependency. If the compiled code also needs the package loaded at runtime, list it in `[package_deps]` too.
+
+    ::: callout-note
+    `build_deps` are not yet folded into the ordinary package-resolution plan. Today they are only installed if they also appear under `[package_deps]`.
+    :::
+
+## Directory conventions {#directory-conventions}
+
+A directory counts as native source (`detect::has_native_src`) if either:
+
+-   It has a `Makevars` or `Makevars.win` file, or
+
+-   It contains at least one `.c`/`.cpp`/`.cc`/`.cxx` file.
+
+As what said on `paths` from [here](#native-block), modules can have more than one native directory. Each qualifying directory is its own independent compilation unit, built and cached separately, with its artifact named after its own folder name. This matters if you're mixing say a `cpp/` dir and a hand-authored `legacy-c/` dir in the same module.
+
+## Module template generation
+
+As of v0.2.0, `carrier init .` generates a scaffolding, containing example codes. Let's say you wanted to write a package out of `{box}` modules that contains C++ code, run `carrier init cppModule --native cpp --backend rcpp` and this produces:
+
+``` text
+cppModule-proj/
+├── carrier.toml
+├── README.md
+└── cppModule/                 # module source directory
+    ├── __init__.r
+    ├── hook.r
+    ├── hello.r
+    ├── add.r
+    └── cpp/
+        ├── hello.cpp
+        ├── add.cpp
+        └── Makevars
+```
+
+After `carrier compile` (or a successful install-time build) the shared library appears here:
+
+```text
+cppModule/
+├── .lib/
+│   └── cpp.so                 # (or .dll / .dylib)
+├── __init__.r
+├── hook.r
+└── ...
+```
+
+### `hook.r`
+
+`hook.r` is written at the top of the native subdirectory, as it loads (and unloads) shared objects from the cache directory named `.lib/`. Here's what it looks like:
+
+`hook.r` (Rcpp backend):
+
+``` r
+box::use(Rcpp[...])
+
+#' @export
+dll = NULL
+
+.on_load = function(ns) {
+    ns$dll = dyn.load(box::file(paste0(".lib/cpp", .Platform$dynlib.ext)))
+}
+
+.on_unload = function(ns) {
+    dyn.unload(box::file(paste0(".lib/cpp", .Platform$dynlib.ext)))
+}
+
+```
+
+The pure-C / cpp11 variant is identical except that it omits the `box::use(Rcpp[...])` line. The placeholder `cpp` is the name of the native directory; `box::file()` resolves relative to the calling module, so the library is found next to the R files.
+
+If you run `carrier init <module-name>` without `--native`, then it writes the pure R equivalent instead. It has the same logics for `hello_world()` and `add()`, and it has the same file layout, but implemented directly in R, no `hook.r`, no `dyn.load()`. A fresh module always starts from runnable examples, compiled or not.
+
+### Binary bundles
+
+`--binary` runs the compile step first, then forces the normally-hidden `.lib/` directories into the archive. The manifest records platform, R version, and source hash for each artifact so an installer can decide whether the pre-built library is safe to use.
+
+```bash
+carrier bundle . --binary                 # ship .lib/, dropping native sources
+carrier bundle . --binary --keep-source   # ship both
+```
+
+## Build cache
+
+Successful builds are cached under
+
+```text
+~/.carrier/native-cache/<module>/<platform>/<R-major.minor>/<source-hash>/
+```
+
+The source hash is a deterministic SHA-256 of every file under the native directory. A cache hit simply copies the library into place, so that `R CMD SHLIB` is never invoked.
+
+
