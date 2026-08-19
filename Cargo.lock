@@ -190,7 +190,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "carrier"
+name = "carrier-cli"
 version = "0.2.0"
 dependencies = [
  "anyhow",

@@ -1,7 +1,7 @@
 [workspace]
 members = [
+    "crates/carrier-cli",
     "crates/carrier-core",
-    "crates/carrier",
     "crates/carrier-native",
 ]
 resolver = "2"
