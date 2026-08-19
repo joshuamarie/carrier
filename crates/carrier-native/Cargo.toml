@@ -1,0 +1,14 @@
+[package]
+name = "carrier-native"
+version.workspace = true
+edition.workspace = true
+description = "Compiles native code bundled inside box modules"
+
+[dependencies]
+anyhow.workspace = true
+dirs.workspace = true
+walkdir.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

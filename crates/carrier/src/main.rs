@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 
 use commands::{
     bundle::BundleArgs,
+    compile::CompileArgs,
     init::InitArgs,
     install::InstallArgs,
     lock::LockArgs,
@@ -31,6 +32,14 @@ enum Commands {
         /// Defaults to <name>-proj if not specified.
         #[arg(long)]
         dir_name: Option<String>,
+
+        /// Scaffold compiled-code support: c or cpp
+        #[arg(long)]
+        native: Option<String>,
+
+        /// Binding library for --native (cpp: rcpp (default) or cpp11)
+        #[arg(long)]
+        backend: Option<String>,
     },
 
     /// Bundle a module into <name>_<version>.tar.gz (default) or .rmbx
@@ -41,6 +50,27 @@ enum Commands {
         /// Bundle as .rmbx instead of the default .tar.gz
         #[arg(long)]
         rmbx: bool,
+
+        /// Also compile native code in place and include the tagged
+        /// binary in the archive. Native source is stripped from the
+        /// archive unless --keep-source is also passed — a mismatched
+        /// or missing tag on install then has nothing to fall back to.
+        #[arg(long)]
+        binary: bool,
+
+        /// Only valid with --binary. Also ships native source
+        /// alongside the compiled binary, so install can fall back to
+        /// compiling if the tag doesn't match this machine.
+        #[arg(long)]
+        keep_source: bool,
+    },
+
+    /// Compile a module's native code in place for local dev/testing.
+    /// Does not delete the native source, unlike the build step that
+    /// runs during `install`.
+    Compile {
+        /// Path to the project root (e.g. `.` or `./my-project`)
+        path: String,
     },
 
     /// Install a module from a .tar.gz, .rmbx, GitHub (gh:user/repo), or
@@ -53,6 +83,9 @@ enum Commands {
         install_deps: bool,
         #[arg(long, help = "Registry URL to install SOURCE from (registries aren't implemented yet)")]
         repo: Option<String>,
+        // /// Build compiled code if present: c, rcpp, or rust
+        // #[arg(long)]
+        // native: Option<String>,
     },
 
     /// Resolve R package dependencies and write carrier.lock, without
@@ -82,12 +115,18 @@ fn main() {
     let cli = Cli::parse();
 
     let result: Result<()> = match cli.command {
-        Commands::Init { name, dir_name } => {
-            commands::init::run(InitArgs { name, dir_name })
+        Commands::Init { name, dir_name, native, backend } => {
+            commands::init::run(InitArgs { name, dir_name, native, backend })
         }
-        Commands::Bundle { path, rmbx } => {
-            commands::bundle::run(BundleArgs { path, rmbx })
+        Commands::Compile { path } => {
+            commands::compile::run(CompileArgs { path })
         }
+        Commands::Bundle { path, rmbx, binary, keep_source } => {
+            commands::bundle::run(BundleArgs { path, rmbx, binary, keep_source })
+        }
+        // Commands::Install { source, install_deps, repo, native } => {
+        //     commands::install::run(InstallArgs { source, install_deps, repo, native })
+        // }
         Commands::Install { source, install_deps, repo } => {
             commands::install::run(InstallArgs { source, install_deps, repo })
         }

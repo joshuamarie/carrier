@@ -68,7 +68,7 @@ fn install_from_dir_then_remove_round_trip() {
 
     // Scaffold a real module project with `carrier init`.
     let project = Scratch::reserved("project");
-    init::run("roundtripmod", Some(project.path().to_str().unwrap())).unwrap();
+    init::run("roundtripmod", Some(project.path().to_str().unwrap()), None, None).unwrap();
 
     // Redirect the install target to a scratch "library" dir.
     let lib = Scratch::reserved("lib");
@@ -79,7 +79,7 @@ fn install_from_dir_then_remove_round_trip() {
     install::run(project.path().to_str().unwrap(), false, None).unwrap();
 
     let module_dir = lib.path().join("roundtripmod");
-    assert!(module_dir.join("__init__.R").is_file());
+    assert!(module_dir.join("__init__.r").is_file());
     let dist_info = lib.path().join("roundtripmod-0.1.0.dist-info");
     assert!(dist_info.join("manifest.json").is_file());
 
@@ -102,7 +102,7 @@ fn reinstalling_replaces_the_previous_install() {
     let _guard = ENV_LOCK.lock().unwrap();
 
     let project = Scratch::reserved("project-reinstall");
-    init::run("reinstallmod", Some(project.path().to_str().unwrap())).unwrap();
+    init::run("reinstallmod", Some(project.path().to_str().unwrap()), None, None).unwrap();
 
     let lib = Scratch::reserved("lib-reinstall");
     let _env = CarrierLibGuard::set(lib.path());
@@ -117,7 +117,7 @@ fn reinstalling_replaces_the_previous_install() {
 
     install::run(project.path().to_str().unwrap(), false, None).unwrap();
     assert!(!module_dir.join("stale.R").exists());
-    assert!(module_dir.join("__init__.R").is_file());
+    assert!(module_dir.join("__init__.r").is_file());
 }
 
 #[test]

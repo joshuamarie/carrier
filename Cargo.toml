@@ -2,12 +2,15 @@
 members = [
     "crates/carrier-core",
     "crates/carrier",
+    "crates/carrier-native",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/joshuamarie/carrier"
 
 [workspace.dependencies]
 anyhow = "1"
@@ -27,3 +30,4 @@ clap = { version = "4", features = ["derive"] }
 assert_cmd = "2"
 insta = "1"
 semver = "1"
+sha2 = "0.10"

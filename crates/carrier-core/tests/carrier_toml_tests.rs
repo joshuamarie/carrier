@@ -1,4 +1,5 @@
 use carrier_core::carrier_toml::{Author, CarrierToml, ModuleMeta, PackageDep, DEFAULT_CRAN_MIRROR};
+use carrier_native::{Backend, NativeLang};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -131,6 +132,7 @@ fn resolve_src_dir_defaults_to_module_name() {
         module: module_meta("mymod", None),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -145,6 +147,7 @@ fn resolve_src_dir_errors_when_default_dir_missing() {
         module: module_meta("mymod", None),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -161,6 +164,7 @@ fn resolve_src_dir_errors_when_init_r_missing() {
         module: module_meta("mymod", None),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -179,6 +183,7 @@ fn resolve_src_dir_uses_explicit_src_override() {
         module: module_meta("mymod", Some("custom_source")),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -193,6 +198,7 @@ fn resolve_src_dir_errors_when_explicit_src_not_a_directory() {
         module: module_meta("mymod", Some("does_not_exist")),
         package_deps: None,
         module_deps: None,
+        native: None,
         test: None,
     };
 
@@ -201,8 +207,63 @@ fn resolve_src_dir_errors_when_explicit_src_not_a_directory() {
 
 #[test]
 fn default_template_contains_module_name_and_parses_as_toml() {
-    let template = CarrierToml::default_template("mymod");
+    // let template = CarrierToml::default_template("mymod");
+    let template = CarrierToml::default_template("mymod", Some((NativeLang::C, None)));
     assert!(template.contains("name = \"mymod\""));
     let parsed: CarrierToml = toml::from_str(&template).unwrap();
     assert_eq!(parsed.module.name, "mymod");
+}
+
+#[test]
+fn default_template_none_leaves_native_block_fully_commented() {
+    let template = CarrierToml::default_template("mymod", None);
+    assert!(template.contains("# path = \"native/\""));
+    assert!(template.contains("# build_deps = { Rcpp = \"*\" }"));
+    assert!(!template.lines().any(|l| l.trim_start().starts_with("path =")));
+    assert!(!template.lines().any(|l| l.trim_start().starts_with("build_deps =")));
+}
+
+#[test]
+fn default_template_c_sets_path_under_module_dir_no_build_deps() {
+    let template = CarrierToml::default_template("mymod", Some((NativeLang::C, None)));
+    assert!(template.contains("path = \"c/\""));
+    assert!(template.contains("# build_deps = { Rcpp = \"*\" }"));
+}
+
+#[test]
+fn default_template_cpp_rcpp_sets_path_and_build_deps() {
+    let template = CarrierToml::default_template(
+        "mymod",
+        Some((NativeLang::Cpp, Some(Backend::Rcpp))),
+    );
+    assert!(template.contains("path = \"cpp/\""));
+    assert!(template.lines().any(|l| l.trim_start() == "build_deps = { Rcpp = \"*\" }"));
+}
+
+#[test]
+fn default_template_cpp_omitted_backend_defaults_to_rcpp() {
+    let template = CarrierToml::default_template("mymod", Some((NativeLang::Cpp, None)));
+    assert!(template.lines().any(|l| l.trim_start() == "build_deps = { Rcpp = \"*\" }"));
+}
+
+#[test]
+fn default_template_cpp11_sets_cpp11_build_deps() {
+    let template = CarrierToml::default_template(
+        "mymod",
+        Some((NativeLang::Cpp, Some(Backend::Cpp11))),
+    );
+    assert!(template.lines().any(|l| l.trim_start() == "build_deps = { cpp11 = \"*\" }"));
+}
+
+#[test]
+fn default_template_all_native_variants_parse_as_valid_toml() {
+    for native in [
+        None,
+        Some((NativeLang::C, None)),
+        Some((NativeLang::Cpp, Some(Backend::Rcpp))),
+        Some((NativeLang::Cpp, Some(Backend::Cpp11))),
+    ] {
+        let template = CarrierToml::default_template("mymod", native);
+        assert!(toml::from_str::<CarrierToml>(&template).is_ok());
+    }
 }

@@ -114,7 +114,7 @@ fn convert_proj_bundles_as_tar_gz_with_matching_metadata() {
         None,
     );
 
-    tar::bundle(&src, &dir, &archive_path, &manifest).unwrap();
+    tar::bundle(&src, &dir, &archive_path, &manifest, &[], &[]).unwrap();
     assert!(archive_path.is_file());
 
     let read_back = tar::read_toml(&archive_path).unwrap();

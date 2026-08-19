@@ -2,6 +2,38 @@
 
 # Development version
 
+## What's new
+
+-   Compiled code support: a module can now declare `[native]` in `carrier.toml` to ship C, C++, Rcpp, Rust, or Fortran code alongside its R source.
+
+    -   `carrier install` automatically compiles a module's native code as part of installing it — no manual build step. Compiled artifacts are cached locally (`~/.carrier/native-cache/`), keyed by source contents, platform, and R version, so unchanged code isn't recompiled on every install.
+
+    -   `carrier init <name> --native <ingredients>` scaffolds a compiled-code module from scratch. A starter source file, build configuration, and a small loader helper wired into `__init__.R`, so no module has to hand-write `dyn.load()`/platform-extension logic itself. `--native` takes a comma-separated set, e.g. `--native c`, `--native rcpp`, `--native c,fortran`:
+
+        ``` bash
+        carrier init stats_native --native rcpp
+        ```
+
+    -   Compiled code doesn't have to live under `src/` 
+    
+        -   `[native]` accepts a `path` override:
+
+            ``` toml
+            [native]
+            path = "native/"
+            build_deps = { Rcpp = "*" }
+            ```
+
+## Fixes
+
+-  `r_version` from `carrier.toml` is now active, as the toolchain to build the binaries depends on the R platform version.
+
+-  `carrier.lock` now handle external dependencies on the native compiled codes.
+
+-  `carrier` now atomically writes `carrier.lock` lockfile via temp file + rename
+
+-  `carrier` will fail when `carrier.toml` repo drifts from `carrier.lock`
+
 # v0.1.3
 
 ## Fixes
@@ -42,6 +74,14 @@
     ```
 
 -   Transitive module dependency resolution: a module's own `module_deps`/`package_deps` are now fetched and resolved recursively, not just the root project's. Dependency cycles are detected and rejected instead of silently resolving or hanging.
+
+-   Fixes on `carrier install` command:
+
+    -   `gh:user/repo/tree/<ref>/<subpath>` sources now install the pinned ref instead of silently falling back to the default branch.
+
+    -   Previously accepts bare names to install the module under local dir (e.g. `carrier install some-dir`), now flags an error
+
+        -   You have to place `.` prefix or `/` suffix if you want to install the module under some local dir, e.g. `carrier install ./some-dir` or `carrier install some-dir/`
 
 -   Fixes on `carrier install` command: 
     
