@@ -34,7 +34,7 @@ jobs:
           rustup target list --installed
 
       - name: "Build"
-        run: cargo build --release --locked --target ${{ matrix.this.target }} -p carrier
+        run: cargo build --release --locked --target ${{ matrix.this.target }} -p carrier-cli
         
       - name: "Smoke test"
         shell: bash
