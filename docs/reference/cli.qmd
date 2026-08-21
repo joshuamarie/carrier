@@ -20,17 +20,10 @@ Once the command is executed, it then creates `carrier.toml`, `README.md`, and `
 ## `carrier bundle`
 
 ``` bash
-carrier bundle <path> [--rmbx]
+carrier bundle <path>
 ```
 
-| Argument | Description |
-|---|---|
-| `<path>` | Project root (the directory containing `carrier.toml`). Usually `.`. |
-| `--rmbx` | Produce a `.rmbx` archive instead of the default `.tar.gz`. |
-
-::: {.callout-note title="Technical Notes"}
-Do not bundle anything to `.rmbx`, yet. It is supposedly an analogue for `.whl` in Python and planned to be scrapped
-:::
+The `<path>` argument refers to the project root, the directory containing `carrier.toml`. Usually the argument is just `.`, referring to the very root of the project directory. 
 
 This command reads `carrier.toml`, then resolves the source directory (see [Module Structure](module-structure.qmd)), and writes `<name>_<version>.<ext>` to the current working directory. It fails if the source directory has no files, or if `carrier.toml` is missing or malformed.
 

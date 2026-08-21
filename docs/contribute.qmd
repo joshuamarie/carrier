@@ -24,7 +24,7 @@ This section also explains the structure where the things live.
 - Add a new CLI surface under `crates/carrier-cli/src/commands/`. Keep it a thin wrapper that parses arguments and calls into `carrier-core`.
 - Put the actual logic in `crates/carrier-core/src/ops/`, which also mirrors the command name.
 - Anything that touches CRAN goes in `crates/carrier-core/src/cran/`.
-- Archive read/write (`.tar.gz`, `.rmbx`) goes in `crates/carrier-core/src/formats/`.
+- Archive read/write (under `.tar.gz`) goes in `crates/carrier-core/src/formats/`.
 
 This split exists so `carrier-core` stays usable outside the CLI. Don't reach into `clap` types from inside `ops/`.
 

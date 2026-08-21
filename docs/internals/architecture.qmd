@@ -16,7 +16,7 @@ crates/
         ├── manifest.rs       # manifest.json embedded in bundled archives
         ├── version.rs        # semver-based VersionSpec
         ├── paths.rs          # install-dir / R-lib-dir resolution
-        ├── formats/          # tar.gz and .rmbx archive read/write
+        ├── formats/          # tar.gz archive read/write
         ├── cran/              # CRAN package fetch, resolve, install
         │   ├── packages.rs    # PACKAGES.gz fetch + parse
         │   ├── client.rs      # dependency resolution + install orchestration
@@ -29,7 +29,7 @@ crates/
 
 ## What goes into `manifest.json`
 
-Every bundled archive (`.tar.gz` or `.rmbx`) embeds a `manifest.json` built from `carrier.toml` by `ops::bundle::build_manifest`:
+Every bundled archive (under `.tar.gz`) embeds a `manifest.json` built from `carrier.toml` by `ops::bundle::build_manifest`:
 
 - `name`, `version`, `description`, `authors`, `license`, `r_version` — copied straight from `[module]`.
 - `dependencies.packages` — flattened from `[package_deps]`; a dependency's `repo` is omitted entirely when it's the default CRAN mirror, and included otherwise.
@@ -37,7 +37,7 @@ Every bundled archive (`.tar.gz` or `.rmbx`) embeds a `manifest.json` built from
 - `files` — every file under the resolved source directory.
 - `bundled_at` — an RFC 3339 timestamp captured at bundle time.
 
-`carrier install` reads this manifest back out of `.rmbx`/`.tar.gz` archives instead of re-parsing `carrier.toml`, so the archive is self-describing.
+`carrier install` reads this manifest back out of `.tar.gz` archives instead of re-parsing `carrier.toml`, so the archive is self-describing.
 
 ## Path resolution
 
