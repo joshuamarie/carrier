@@ -1,32 +1,34 @@
 # Convert package
 
-This is an example `carrier` package, where it contains the collection of 
+This is an example `{box}` module package managed by `{carrier}`, where it contains the collection of example codes featuring conversion units. 
 
 ## Installation
 
-To install this package, you have to install `carrier`:
+See the [{carrier} installation guide](https://joshuamarie.com/carrier/installation.html) for the installation details first. Then, for the meantime, install the patched forked `{box}` version:
+
+``` r
+# install.packages('pak')
+pak::pak("joshuamarie/box@feature/carrier-module-support")
+```
+
+Then, install this package via following:
 
 ``` bash
-# Where the command lives
-```
-
-And then the latest `{box}` 1.x.x version. 
-
-Then install this package:
-
-```
 carrier install gh:joshuamarie/carrier/tree/main/convert-proj
 ```
 
 ## Usage
 
-This module acts like an R package, but has similar paradigm as Python's. 
+This module IS an R package, not the traditional CRAN-style package, and it has to be attached through `box::use()` and has similar paradigm as Python's. 
 
-It has several ways to `convert`:
+It has several ways to import the `convert` module:
 
 ``` r
 box::use(
     convert,
-    tmp = convert/temp
+    cv = convert, 
+    convert/mass,
+    tmp = convert/temp,
+    ...
 )
 ```
