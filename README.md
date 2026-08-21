@@ -5,13 +5,13 @@
 [![Release](https://img.shields.io/github/v/release/joshuamarie/carrier)](https://github.com/joshuamarie/carrier/releases)
 [![License](https://img.shields.io/github/license/joshuamarie/carrier)](https://github.com/joshuamarie/carrier/blob/main/LICENSE.md)
 
-A module manager for [`{box}`](https://klmr.me/box/) modules.
+A module manager for [{box}](https://klmr.me/box/) modules.
 
-`carrier` is another package manager for R, built in Rust, exclusive for `{box}` modules. The tasks it handle involves bundling and installment. The entire purpose of `carrier` is to make the packaging for `{box}` modules possible and to be easily distributed. The interface of `carrier` is similar to Python's `pip`.
+`{carrier}` is another package manager for R, built in Rust, exclusive for `{box}` modules. The tasks it handles involve bundling and installation. The entire purpose of `{carrier}` is to make the packaging for `{box}` modules possible and to be easily distributed. The interface of `carrier` is similar to that Python's `pip`.
 
 ## Installation
 
-`carrier` is a command line interface (CLI) tool built in Rust. Pre-built binaries for Linux, macOS, and Windows is available on the [Releases](https://github.com/joshuamarie/carrier/releases).
+`{carrier}` is a command line interface (CLI) tool built in Rust. Pre-built binaries for Linux, macOS, and Windows is available on the [Releases](https://github.com/joshuamarie/carrier/releases).
 
 You can install `carrier` using the Shell installers. 
 
@@ -37,23 +37,24 @@ curl -LsSf https://github.com/joshuamarie/carrier/releases/download/v0.1.1/carri
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/joshuamarie/carrier/releases/download/v0.1.1/carrier-installer.ps1 | iex"
 ```
 
-To install the development version of `carrier` from GitHub, one requires [Rust](https://www.rust-lang.org/tools/install) (stable toolchain), particularly `rustc` and `cargo` on your system to compile it from source.
+To install the development version of `{carrier}` from GitHub, one requires [Rust](https://www.rust-lang.org/tools/install) (stable toolchain), particularly toolchains namely `rustc` and `cargo` on your system to compile it from source.
 
 ``` bash
 cargo install --git https://github.com/joshuamarie/carrier
 ```
 
-Then install the particular main dependency `{box}`. In a meantime, kindly install the package from the forked repo, as the patches for `carrier` support are written down there:
+Then install the particular main `{box}` package to load the modules managed by `{carrier}`. In a meantime, kindly install the package from the forked repo, as the patches for `{carrier}` support are written down there and hasn't made in its upstream yet, so do the following:
 
 ``` r
 # Install the package through GitHub
+# This needs compilation BTW
 # install.packages('pak')
 pak::pak("joshuamarie/box@feature/carrier-module-support")
 ```
 
 ## Requirements
 
-The idea for a distributable module is simple. Similar to Python, the usual structure of `box` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.R` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from R works.  
+The idea for distributable `{box}` modules is simple, really, you just need few requirements. Similar to Python packages, the usual structure of `{box}` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.r` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from traditional CRAN-style packages.  
 
 Here's an example structure of the module: 
 
@@ -70,11 +71,11 @@ Here's an example structure of the module:
         └── example.r
 ```
 
-If you know the structure of Python packages, this feels familiar to you. 
+And the structure can go deeper than this. If you know the structure of Python packages, this feels familiar to you. 
 
-## How it works
+## CLI Usage: How it works
 
-`carrier` has few commands to manage the modules. 
+`{carrier}` has few commands to manage the modules. 
 
 *Note: `<name-of-the-module>` is a placeholder. Apply a valid name.*
 
@@ -110,7 +111,7 @@ If you know the structure of Python packages, this feels familiar to you.
     carrier remove <name-of-the-module>
     ```
 
-5.  Optionally pin those R package versions so later installs reproduce them:
+5.  Optional: Pin those R package versions so later installs reproduce them:
 
     ``` bash
     carrier lock .
@@ -118,9 +119,9 @@ If you know the structure of Python packages, this feels familiar to you.
 
 ## Using installed modules
 
-There are patches along the source code of `{box}`. This way, `carrier` syncs with `{box}` R package (this includes the syntax). The `box::use()` automatically resolves the path where the installed modules belong.
+There are patches along the source code of `{box}`. This way, the modules managed by `{carrier}` syncs with `{box}` R package (this includes the syntax). The `box::use()` automatically resolves the path where the `{carrier}`-installed modules belong.
 
-Here's an example: 
+Try `{convert}` module, which belongs to `convert-proj` from this GitHub repo: 
 
 ```r
 # carrier install gh:joshuamarie/carrier/tree/main/convert-proj
