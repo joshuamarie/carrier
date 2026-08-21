@@ -44,7 +44,7 @@ box::use(
 
 Now, if you plan to attach the namespace under `{rmod}` module after installing this module, you can attach it according to the following:
 
-```{r}
+``` r
 box::use(
     rmod, 
     rmod[add, hello_world], 
