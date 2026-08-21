@@ -170,7 +170,7 @@ pub fn read_toml(tar_path: &Path) -> Result<crate::carrier_toml::CarrierToml> {
     Ok(crate::carrier_toml::CarrierToml {
         native: manifest.native.map(|n| crate::carrier_toml::NativeConfig {
             path: None,
-            paths: None,
+            // paths: None,
             build_deps: if n.build_deps.is_empty() {
                 None
             } else {

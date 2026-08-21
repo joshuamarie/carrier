@@ -63,7 +63,7 @@ impl std::fmt::Display for Author {
             Author::Extended { name, email, url, .. } => {
                 write!(f, "{}", name)?;
                 if let Some(e) = email { write!(f, " <{}>", e)?; }
-                if let Some(u) = url  { write!(f, " ({})", u)?; }
+                if let Some(u) = url { write!(f, " ({})", u)?; }
                 Ok(())
             }
         }
@@ -122,27 +122,46 @@ impl ModuleDep {
     }
 }
 
+// ---- NativePath ----
+
+/// `[native].path` accepts either a single string or an array, so a
+/// module with one compiled-code dir doesn't have to write
+/// `path = ["cpp/"]` just to satisfy a Vec-only field, and a module
+/// with several doesn't have to pick one arbitrarily.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum NativePath {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+impl NativePath {
+    pub fn as_paths(&self) -> Vec<&str> {
+        match self {
+            NativePath::Single(p) => vec![p.as_str()],
+            NativePath::Multiple(ps) => ps.iter().map(String::as_str).collect(),
+        }
+    }
+}
+
 // ---- NativeConfig ----
 /// Declares where a module's compiled code lives, and its build-time-
 /// only R package deps (e.g. `Rcpp`), whose headers a `Makevars` needs
 /// to find via `system.file()` before `R CMD SHLIB` can run.
 ///
-/// `path`/`paths` are relative to the module's own source directory
-/// (whatever `resolve_src_dir()` resolves to) — the same base `src`
-/// in `[module]` already uses, not the project root `carrier.toml`
-/// lives in. `paths = ["cpp", "extra/src"]` in a module's own
-/// `carrier.toml` means exactly what it looks like: two dirs nested
-/// under that module's source tree.
+/// `path` is relative to the module's own source directory (whatever
+/// `resolve_src_dir()` resolves to) — the same base `src` in
+/// `[module]` already uses, not the project root `carrier.toml` lives
+/// in. `path = ["cpp", "extra/src"]` in a module's own `carrier.toml`
+/// means exactly what it looks like: two dirs nested under that
+/// module's source tree.
 ///
 /// `path` is optional and exists purely as an override. When omitted,
 /// `resolve_native_dirs()` scans the module's whole source tree for
 /// compiled-code dirs instead of assuming one is where it must live.
-/// `paths` is the same idea for more than one location. `path` and
-/// `paths` are mutually exclusive; if both are set, `paths` wins.
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct NativeConfig {
-    pub path: Option<String>,
-    pub paths: Option<Vec<String>>,
+    pub path: Option<NativePath>,
     pub build_deps: Option<BTreeMap<String, PackageDep>>,
 }
 
@@ -246,33 +265,19 @@ impl CarrierToml {
         Ok(dir)
     }
 
-    /// Resolve the directory containing this module's compiled code.
-    /// `[native].path`, when set, is relative to the module's own
-    /// source directory — same base as `resolve_src_dir()` — not the
-    /// project root.
-    pub fn resolve_native_dir(&self, project_root: &Path) -> Result<PathBuf> {
-        let src_dir = self.resolve_src_dir(project_root)?;
-        match self.native.as_ref().and_then(|n| n.path.as_deref()) {
-            Some(path) => Ok(src_dir.join(path)),
-            None => Ok(src_dir.join("src")),
-        }
-    }
-
     /// Every native code location this module actually has.
-    /// `[native].paths`/`path`, when set, are resolved relative to the
-    /// module's own source directory, not the project root — a module
-    /// can write `paths = ["cpp", "extra/src"]` meaning exactly those
-    /// two subdirectories of its own source tree. Without either, this
-    /// scans the whole module source tree for compiled-code dirs.
+    /// `[native].path`, when set, is resolved relative to the module's
+    /// own source directory, not the project root — a module can write
+    /// `path = "cpp"` for one location or `path = ["cpp", "extra/src"]`
+    /// for several, both resolved against that module's own source
+    /// tree. Without it, this scans the whole module source tree for
+    /// compiled-code dirs.
     pub fn resolve_native_dirs(&self, project_root: &Path) -> Result<Vec<PathBuf>> {
         let native = self.native.as_ref();
         let src_dir = self.resolve_src_dir(project_root)?;
 
-        if let Some(paths) = native.and_then(|n| n.paths.as_ref()) {
-            return Ok(paths.iter().map(|p| src_dir.join(p)).collect());
-        }
-        if let Some(path) = native.and_then(|n| n.path.as_deref()) {
-            return Ok(vec![src_dir.join(path)]);
+        if let Some(path) = native.and_then(|n| n.path.as_ref()) {
+            return Ok(path.as_paths().into_iter().map(|p| src_dir.join(p)).collect());
         }
 
         Ok(find_native_dirs(&src_dir))
@@ -284,7 +289,7 @@ impl CarrierToml {
 
     /// `native` is `Some((lang, backend))` when `carrier init` was run
     /// with `--native`. `path` is written relative to the module's own
-    /// source directory — matching how `resolve_native_dir()` now
+    /// source directory — matching how `resolve_native_dirs()` now
     /// resolves it — not the project root.
     pub fn default_template(name: &str, native: Option<(NativeLang, Option<Backend>)>) -> String {
         let native_block = match native {
@@ -302,25 +307,24 @@ impl CarrierToml {
 # Only needed if native code doesn't live in the default location
 # (src/ under this module's source dir), or if `src/Makevars`
 # references headers from another R package (e.g. Rcpp).
-path = "{dir_name}/"            # override (defaults to src/ if omitted)
-# paths = ["{dir_name}/"]  # If there are multiple folders containing the native code
+path = "{dir_name}/"
+# path can also be an array: path = ["{dir_name}/", "extra/src"]
 {build_deps_line}
-# resolved and installed before compiling.
-# Does not imply a runtime dependency; list in
-# [package_deps] too if the compiled code also
-# needs it loaded at runtime"#
+# build_deps is resolved and installed before compiling.
+# Does not imply a runtime dependency; list in [package_deps]
+# too if the compiled code also needs it loaded at runtime"#
                 )
             }
             None => r#"[native]
 # Only needed if native code doesn't live in the default location
 # (src/ under this module's source dir), or if `src/Makevars`
 # references headers from another R package (e.g. Rcpp).
-# path = "native/"            # override (defaults to src/ if omitted)
+# path = "native/"
+# path can also be an array: path = ["native/", "extra/src"]
 # build_deps = { Rcpp = "*" }
-                    # resolved and installed before compiling.
-                    # Does not imply a runtime dependency; list in
-                    # [package_deps] too if the compiled code also
-                    # needs it loaded at runtime"#
+# build_deps is resolved and installed before compiling.
+# Does not imply a runtime dependency; list in [package_deps]
+# too if the compiled code also needs it loaded at runtime"#
                 .to_string(),
         };
 
