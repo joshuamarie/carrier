@@ -2,23 +2,23 @@
 title: "Installation"
 ---
 
-`carrier` ships as a single native binary. There is no R package to install for the CLI itself, only for the `{box}` fork it depends on at runtime (see [below](#the-box-fork)).
+`{carrier}` ships as a native binary. There is no R package to install for the CLI itself, only for the `{box}` fork it depends on at runtime (see [below](#the-box-fork)).
 
 ## Pre-built binaries
 
 Pre-built binaries for Linux, macOS, and Windows are published on the [Releases](https://github.com/joshuamarie/carrier/releases) page.
 
-Linux / macOS:
+1.  Linux / macOS:
 
-``` bash
-curl -sSL https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.sh | bash
-```
+    ``` bash
+    curl -sSL https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.sh | bash
+    ```
 
-Windows:
-
-``` bash
-powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.ps1 | iex"
-```
+    2.  Windows:
+    
+    ``` bash
+    powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/joshuamarie/carrier/refs/heads/main/scripts/install.ps1 | iex"
+    ```
 
 To pin a specific version, use that version's asset URL instead of the `latest` one the scripts above resolve to:
 
@@ -32,27 +32,29 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/joshuamarie/carrie
 
 ## Building from source
 
-Requires the stable Rust toolchain (`rustc`, `cargo`):
+`{carrier}` is a CLI tool built in Rust, so it requires the stable Rust toolchain (`rustc`, `cargo`). Once you managed to add the Rust toolchain, install `{carrier}` from scratch via following command: 
 
 ``` bash
 cargo install --git https://github.com/joshuamarie/carrier
 ```
 
-`carrier`'s GitHub-install path (`carrier install gh:user/repo`) is compiled behind the `network` feature on `carrier-core`. If you're building from source and plan to install modules directly from GitHub, confirm that feature is enabled for the binary you build — otherwise `carrier install gh:...` will fail with an explicit "requires the 'network' feature" error rather than silently doing nothing.
+`{carrier}`'s GitHub-install path (`carrier install gh:user/repo`) is compiled behind the `network` feature on `carrier-core`. If you're building from source and plan to install modules directly from GitHub, confirm that feature is enabled for the binary you build, otherwise `carrier install gh:...` will fail with an explicit "requires the 'network' feature" error rather than silently doing nothing.
+
+### Verifying the install
+
+``` bash
+carrier --version
+```
 
 ## The `{box}` fork
 
-`carrier`-installed modules are resolved through `{box}`, but the syntax and path-resolution patches that make `box::use()` aware of `carrier`'s install location aren't in upstream `{box}` yet. Until they land, install the patched fork:
+You are working with `{box}` modules, and `{carrier}` is the "package manufacturer", so it requires `{box}` R package. `{carrier}`-installed modules are resolved through `{box}`, although the syntax and path-resolution patches that make `box::use()` aware of `carrier`'s install location aren't in upstream `{box}` yet. Until they land, install the patched fork:
 
 ``` r
 # install.packages('pak')
 pak::pak("joshuamarie/box@feature/carrier-module-support")
 ```
 
-## Verifying the install
-
-``` bash
-carrier --version
-```
+## What's more? 
 
 Next: [Get Started](getting-started.qmd) walks through initializing, bundling, and installing a module end to end.

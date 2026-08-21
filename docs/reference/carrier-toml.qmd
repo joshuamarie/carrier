@@ -2,40 +2,55 @@
 title: "carrier.toml"
 ---
 
-`carrier.toml` sits at the root of a module project, one level above the source directory. It has up to four tables: `[module]` (required), `[package_deps]`, `[module_deps]`, and `[test]`.
+`carrier.toml` sits at the root of a module project, one level above the source directory. It may contain up to five tables:
+
+| Table | Required | Purpose |
+|--------------------|----------------------------|-------------------------|
+| `[module]` | yes | Module identity and source location |
+| `[package_deps]` | no | Runtime R package dependencies |
+| `[module_deps]` | no | Other carrier modules this module depends on |
+| `[native]` | no | Location(s) of compiled code and build-time-only package deps |
+| `[test]` | no | Test framework configuration (currently advisory only) |
 
 ## `[module]`
 
 | Field | Type | Required | Notes |
-|---|---|---|---|
-| `name` | string | yes | Also the default source directory name. |
-| `version` | string | yes | Free-form; `carrier bundle` uses it verbatim in the output filename. |
+|-----------------|-----------------|---------------------|-----------------|
+| `name` | string | yes | Module name. Also the default source-directory name when `src` is omitted. |
+| `version` | string | yes | Free-form version string. `carrier bundle` embeds it verbatim in the archive filename. |
 | `description` | string | yes | May be empty. |
 | `authors` | array | yes | See [Authors](#authors) below. |
-| `license` | string | yes | |
-| `r_version` | string | yes | Declarative minimum R version |
-| `src` | string | no | Path to the source directory, relative to the project root. Defaults to a directory named exactly `name`. Whatever directory is used, it must contain `__init__.R`. |
+| `license` | string | yes | SPDX identifier or free-form text. |
+| `r_version` | string | yes | Declarative minimum R version (e.g. `">=4.0.0"`). See note below. |
+| `src` | string | no | Path to the source directory, relative to the project root. Defaults to a directory named exactly `name`. The chosen directory **must** contain `__init__.r` or `__init__.R`. |
 
 ::: {.callout-note title="Technical Notes"}
-For `r_version`, it is carried into the archive manifest, but it is not currently checked against the R installation running `carrier install`.
+-   `r_version` is recorded in the archive manifest but is **not** currently enforced against the R installation that runs `carrier install` / `carrier compile`.
+-   Both `__init__.r` and `__init__.R` are accepted (case-insensitive entry-point detection). This matches `{box}`'s own behaviour.
 :::
 
-### Authors
+### Authors {#authors}
 
-Each entry in `authors` is either a plain string or an inline table:
+Each entry is either a plain string or an inline table:
 
 ``` toml
 authors = [
     "Jane Doe",
-    { name = "Joshua Marie", email = "joshua.marie.k@gmail.com" },
+    { name = "Joshua Marie", email = "joshua.marie.k@gmail.com", url = "https://example.com", orcid = "0000-0000-0000-0000" },
 ]
 ```
 
-The inline table form accepts `name` (required), and optional `email`, `url`, `orcid`.
+| Field   | Required | Notes                               |
+|---------|----------|-------------------------------------|
+| `name`  | yes      | Display name                        |
+| `email` | no       |                                     |
+| `url`   | no       | Personal or organisational homepage |
+| `orcid` | no       | ORCID iD                            |
 
 ## `[package_deps]`
 
-Maps an R package name to a version requirement — either a bare string (CRAN, default mirror) or an inline table with an explicit `repo`:
+Maps an R package name to a version requirement.\
+A value may be a bare string (CRAN, default mirror) or an inline table that also specifies a repository:
 
 ``` toml
 [package_deps]
@@ -44,50 +59,86 @@ ggplot2 = ">=3.4.0"
 fable = { version = "*", repo = "https://tidyverts.r-universe.dev/" }
 ```
 
-### Version spec syntax
+The default mirror is `https://cloud.r-project.org`.
 
-| Syntax | Meaning |
-|---|---|
-| `"*"` | Any version |
-| `">=1.0.0"` | Lower bound only |
-| `">=1.0.0, <2.0.0"` | Range (comma-separated bounds) |
-| `"^1.2.0"` | semver-compatible with 1.2.0 |
-| `"=1.2.3"` | Exact pin |
+### Version-spec syntax
 
-R version strings that use dashes (e.g. `4.0-3`, as CRAN's `PACKAGES` index does) are normalized to dots internally before being parsed as semver.
+| Syntax              | Meaning                                  |
+|---------------------|------------------------------------------|
+| `"*"`               | Any version                              |
+| `">=1.0.0"`         | Lower bound only                         |
+| `">=1.0.0, <2.0.0"` | Inclusive range (comma-separated bounds) |
+| `"^1.2.0"`          | SemVer-compatible with 1.2.0             |
+| `"=1.2.3"`          | Exact pin                                |
+
+CRAN version strings that use dashes (e.g. `4.0-3`) are normalised to dots before parsing.
 
 ## `[module_deps]`
 
-Maps a `carrier`-installed module name to a version requirement, using the same syntax as `[package_deps]`. Unlike `[package_deps]`, there's no default registry to fall back to (as of now), a module dependency also needs a `source` telling `carrier` where to fetch it from:
+Maps another carrier module to a version requirement, using the same version-spec syntax as `[package_deps]`. Unlike package dependencies, there is no default registry...yet. Every resolvable entry must therefore supply a `source`:
 
 ``` toml
 [module_deps]
 other_module = { version = "*", source = "gh:user/repo" }
+# pin a tag / branch / commit and optional sub-directory:
+utils = { version = ">=0.2", source = "gh:user/repo/tree/v0.3.1/modules/utils" }
 ```
 
-`source` accepts the same syntax as `carrier install`'s `<source>` argument, currently `gh:user/repo`, optionally `gh:user/repo/tree/<ref>/<subpath>` to pin a tag, branch, or commit. See [CLI Commands](cli.qmd#carrier-install).
+`source` accepts the same forms as the `<source>` argument of `carrier install` (currently `gh:user/repo` and the `/tree/<ref>/<subpath>` variant). See [CLI reference](cli.qmd#carrier-install).
 
-The bare-string form is still accepted, but has no source and can't be resolved on its own:
+A bare-string form is accepted by the parser but cannot be resolved:
 
 ``` toml
 [module_deps]
-other_module = "*"
+other_module = "*"   # will fail at resolution time
 ```
 
 ::: {.callout-note title="Technical Notes"}
-A `module_deps` entry with no `source`, whether written as a bare string or as `{ version = "...", source = ... }` with `source` omitted, fails resolution with an explicit error rather than silently falling back to anything. There is no CRAN-equivalent default registry for modules, so there's nothing to fall back to.
+An entry without a `source` (whether written as a bare string or as an inline table that omits the field) produces an explicit resolution error. There is deliberately no silent fallback.
+:::
+
+## `[native]`
+
+Declares the location(s) of compiled code belonging to the module and any build-time-only R packages whose headers are needed by `Makevars` / `R CMD SHLIB` (most commonly `Rcpp` or `cpp11`).
+
+``` toml
+[native]
+path = "cpp/"                 # single directory, relative to the module's source dir
+# path = ["cpp/", "extra/"]   # or an array, for multiple directories
+
+build_deps = { Rcpp = "*" }   # installed before compilation; not a runtime dependency
+```
+
+| Field | Type | Required | Notes |
+|-----------------|-----------------|---------------------|-----------------|
+| `path` | string or array of strings | between yes and no | Directory, or directories, containing native sources + `Makevars`. Relative to the module's own source directory (the same base used by `src`). A single location can be written as a plain string; more than one as an array. |
+| `build_deps` | table | no | Map of package name → version requirement (same syntax as `[package_deps]`). These packages are resolved and installed **before** `R CMD SHLIB` runs. They do **not** become runtime dependencies; list them again under `[package_deps]` if the compiled code also needs them loaded at runtime. |
+
+### Resolution rules
+
+1.  If `path` is set, those directories (relative to the module source dir) are used, whether it's written as a single string or an array.
+2.  Else, carrier scans the whole module source tree for directories that contain a `Makevars` (or recognised C/C++ sources). This is the behaviour you get when the `[native]` table is omitted entirely.
+
+The directory name itself is free (`c/`, `cpp/`, `fortran/`, `src/`, …). Detection is driven by the presence of build artefacts, not by a fixed folder name. See also the native-code scaffolding produced by `carrier init --native`.
+
+::: {.callout-note title="Technical Notes"}
+-   Fortran scaffolding is recognised by the language parser but is not yet supported by the build pipeline (`R CMD SHLIB` is only invoked for `.c`/`.cpp`/`.cc`/`.cxx` sources).
+-   Compiled artefacts are placed in `<module>/.lib/` (next to `__init__.R`) so that `box::file()` resolves them correctly.
+-   Build results are cached by source hash + R platform + R version.
 :::
 
 ## `[test]`
 
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `framework` | string | yes | e.g. `"testthat"` |
-| `dir` | string | no | Test directory, e.g. `"tests"` |
+Advisory configuration for a future test runner. Carrier does not yet execute tests.
+
+| Field       | Type   | Required | Notes                                          |
+|------------|------------|------------|-------------------------------------|
+| `framework` | string | yes      | e.g. `"testthat"`                              |
+| `dir`       | string | no       | Directory containing tests (default `"tests"`) |
 
 ## Full template
 
-This is what `carrier init` writes:
+This is the exact text written by `carrier init` (the `[native]` block appears only when `--native` is supplied):
 
 ``` toml
 [module]
@@ -98,9 +149,9 @@ authors = [
     { name = "Your Name", email = "you@example.com" },
 ]
 license = "Unknown"
-r_version = "4.0.0"
+r_version = ">=4.0.0"
 # src = "convert"    # path to the source directory containing __init__.R
-                      # defaults to a directory named after the module
+                    # defaults to a directory named after the module
 
 [package_deps]
 # dplyr = "*"
@@ -110,7 +161,20 @@ r_version = "4.0.0"
 [module_deps]
 # other_module = "*"
 
+[native]
+# Only needed if native code doesn't live in the default location
+# (src/ under this module's source dir), or if `src/Makevars`
+# references headers from another R package (e.g. Rcpp).
+# path = "native/"
+# path can also be an array: path = ["native/", "extra/src"]
+# build_deps = { Rcpp = "*" }
+# build_deps is resolved and installed before compiling.
+# Does not imply a runtime dependency; list in [package_deps]
+# too if the compiled code also needs it loaded at runtime
+
 [test]
 framework = "testthat"
 dir = "tests"
 ```
+
+When `carrier init --native cpp` (or `--native c`, etc.) is used, the `[native]` block is un-commented and populated with the appropriate `path` and `build_deps` for the chosen language / backend.

@@ -2,73 +2,90 @@
 title: "Get Started"
 ---
 
-This walkthrough builds, bundles, and installs a small module from nothing, then uses it from R. It assumes `carrier` is on your `PATH` (see [Installation](installation.qmd) if it isn't).
+This walkthrough builds, bundles, and installs a small module from nothing, then uses it from R. It assumes `{carrier}` is on your path (see [Installation](installation.qmd) if it isn't). Here are following step by step: 
 
 ## 1. Scaffold a module
+
+By default, `carrier init <module-name>` scaffolds the module project containing the pure R codes as the source. Normally, this is how it looks like after the pre-construction of the module:
+
+```
+<module-name>-proj/
+├── carrier.toml
+├── README.md
+└── <module-name>/
+    ├── hello.r
+    ├── add.r
+    └── __init__.r
+```
+
+Let's try it with `{rmod}` for example: 
 
 ``` bash
 carrier init rmod
 ```
 
-This creates `rmod-proj/` (the default directory name is `<name>-proj`; override it with `--dir-name`):
+This creates `rmod-proj/` (the default directory name is `<name>-proj`). If you don't want the `-proj` prefix, then override it with `--dir-name`. 
 
-```
-rmod-proj/
-├── carrier.toml
-├── README.md
-└── rmod/
-    └── __init__.R
-```
-
-`carrier.toml` starts out mostly empty. Fill in `description`, `authors`, `license`, and any `[package_deps]` or `[module_deps]` your module needs. See the [carrier.toml reference](reference/carrier-toml.qmd) for the full schema.
+The generated `carrier.toml` starts out mostly skeletal — some were pre-filled, and you can edit them once you started making a package. Fill the empty parameters or modify the pre-filled values, e.g. `description`, `authors`, `license`, and any `[package_deps]` or `[module_deps]` your module needs. See the [carrier.toml reference](reference/carrier-toml.qmd) for the full schema.
 
 The source directory (`rmod/`) is named after the module by default. If you'd rather use a different directory name, set `src` in `carrier.toml` (see [Module Structure](reference/module-structure.qmd)).
 
 ## 2. Write the module
 
-Everything under `rmod/` is plain `{box}` code. `__init__.R` is the entry point, the module-level equivalent of `NAMESPACE`. Here's an example: 
+Everything under `rmod/` is just a typical R code. `{box}` provides Python-like approach for composability of the module. If there's `__init__.py`, there's also `__init__.r` that serves as the entry point, the module-level equivalent of `NAMESPACE` but better. Here's what it looks like under `__init__.r` 
 
 ``` r
 #' @export
 box::use(
-    ./module1,
-    ./module2,
+    ./hello[hello_world],
+    ./add[add], 
 )
 ```
 
-## 3. Bundle it
+Now, if you plan to attach the namespace under `{rmod}` module after installing this module, you can attach it according to the following:
 
-From the project root:
+```{r}
+box::use(
+    rmod, 
+    rmod[add, hello_world], 
+    # You can access the submodule under rmod
+    rmod/add, 
+    rmod/hello, 
+)
+```
+
+## 3. Packaging/Bundling
+
+This step is similar to `R CMD build` command or `devtools::build()`, so this would be more familiar to do. The step to package the `{box}` module with `{carrier}` is simple, so start from the project root:
 
 ``` bash
 carrier bundle .
+#> Bundled 'rmod' (0.1.0) -> /path/to/rmod_0.1.0.tar.gz
 ```
 
-```
-Bundled 'convert' (0.1.0) -> /path/to/rmod_0.1.0.tar.gz
-```
-
-Pass `--rmbx` to produce a `.rmbx` archive instead of `.tar.gz`. Either way, the archive embeds a `manifest.json` built from `carrier.toml` (see [Architecture](internals/architecture.qmd) for what goes into it).
+<!-- Pass `--rmbx` to produce a `.rmbx` archive instead of `.tar.gz`. Either way, the archive embeds a `manifest.json` built from `carrier.toml` (see [Architecture](internals/architecture.qmd) for what goes into it). -->
 
 ## 4. Install it
 
-From a local archive:
+This is your typical package installation step. There are few ways to install the modules:
 
-``` bash
-carrier install rmod_0.1.0.tar.gz
-```
+1.  If this module is from a tarball local archive:
 
-Directly from a module directory (carrier bundles it to a temp file first, then installs that):
+    ``` bash
+    carrier install ./rmod_0.1.0.tar.gz
+    ```
 
-``` bash
-carrier install .
-```
+2.  Directly from a module directory (carrier bundles it to a temp file first, then installs that):
 
-Or from a GitHub repo, optionally pointing at a subpath:
+    ``` bash
+    carrier install .
+    ```
 
-``` bash
-carrier install gh:username/path/to/rmod-proj
-```
+3.  From a GitHub repo, optionally pointing at a subpath:
+
+    ``` bash
+    carrier install gh:username/path/to/rmod-proj
+    ```
 
 Installing prints where the module landed and the dependency plan carrier worked out from `[package_deps]` / `[module_deps]`:
 
@@ -84,8 +101,12 @@ Dependencies:
 By default, R package dependencies are only *planned*, not installed. To install the main package dependencies, pass `--install-deps` to actually fetch and install them from CRAN (the default repo):
 
 ``` bash
-carrier install rmod_0.1.0.tar.gz --install-deps
+carrier install ./rmod_0.1.0.tar.gz --install-deps
 ```
+
+::: callout-note
+Installation of `{box}` module packages from the local or GitHub requires you to provide the prefixes like `.`, `./`, `../` and suffixes like `/`. You are not allowed to install the module with just a bare name — it is reserved for modules under remote repositories (this would be the "CRAN" for modules once it is made). 
+:::
 
 ## 5. Lock dependencies (optional)
 
@@ -101,21 +122,26 @@ This writes `carrier.lock` next to `carrier.toml`, listing every resolved packag
 carrier lock . --update
 ```
 
-`--update` ignores any existing lock and re-resolves everything fresh — use it when you want to deliberately pick up newer versions rather than stay pinned.
+`--update` ignores any existing lock and re-resolves everything fresh. You'll use it when you want to deliberately pick up newer versions rather than stay pinned.
 
 Once a lock exists, later installs use it automatically: any package the lock pins installs at that exact version instead of being re-resolved, while anything not in the lock (e.g. a dependency you just added) still resolves fresh.
 
 ## 6. Use it from R
 
+Remember: This is not your traditional CRAN-style packages, so you cannot simply attach it through `library()` or `::`, instead use `box::use()`, just like the `import` keyword from Python. 
+
 ``` r
 box::use(rmod)
-rmod$module1$fn(...)
+rmod$add(1, 4)
+#> 5
 ```
 
 ## 7. Remove it
+
+If you wish to remove `{<module-name>}` (any packages managed by `{carrier}`), `carrier remove <module-name>` is used, akin to `pip uninstall`. 
 
 ``` bash
 carrier remove rmod
 ```
 
-You'll be asked to confirm; skip the prompt with `--force`.
+You'll be asked to confirm between yes and no. To skip the prompt, supply it with `--force`.

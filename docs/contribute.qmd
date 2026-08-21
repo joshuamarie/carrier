@@ -21,7 +21,7 @@ cargo build --workspace --features carrier-core/network
 
 This section also explains the structure where the things live. 
 
-- Add a new CLI surface under `crates/carrier/src/commands/`. Keep it a thin wrapper that parses arguments and calls into `carrier-core`.
+- Add a new CLI surface under `crates/carrier-cli/src/commands/`. Keep it a thin wrapper that parses arguments and calls into `carrier-core`.
 - Put the actual logic in `crates/carrier-core/src/ops/`, which also mirrors the command name.
 - Anything that touches CRAN goes in `crates/carrier-core/src/cran/`.
 - Archive read/write (`.tar.gz`, `.rmbx`) goes in `crates/carrier-core/src/formats/`.
