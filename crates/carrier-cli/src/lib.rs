@@ -42,14 +42,10 @@ enum Commands {
         backend: Option<String>,
     },
 
-    /// Bundle a module into <name>_<version>.tar.gz (default) or .rmbx
+    /// Bundle a module into <name>_<version>.tar.gz
     Bundle {
         /// Path to the project root (e.g. `.` or `./my-project`)
         path: String,
-
-        /// Bundle as .rmbx instead of the default .tar.gz
-        #[arg(long)]
-        rmbx: bool,
 
         /// Also compile native code in place and include the tagged
         /// binary in the archive. Native source is stripped from the
@@ -73,7 +69,7 @@ enum Commands {
         path: String,
     },
 
-    /// Install a module from a .tar.gz, .rmbx, GitHub (gh:user/repo), or
+    /// Install a module from a .tar.gz, GitHub (gh:user/repo), or
     /// a module registry (bare name + --repo; registries aren't
     /// implemented yet)
     Install {
@@ -121,8 +117,8 @@ pub fn run() {
         Commands::Compile { path } => {
             commands::compile::run(CompileArgs { path })
         }
-        Commands::Bundle { path, rmbx, binary, keep_source } => {
-            commands::bundle::run(BundleArgs { path, rmbx, binary, keep_source })
+        Commands::Bundle { path, binary, keep_source } => {
+            commands::bundle::run(BundleArgs { path, binary, keep_source })
         }
         // Commands::Install { source, install_deps, repo, native } => {
         //     commands::install::run(InstallArgs { source, install_deps, repo, native })
