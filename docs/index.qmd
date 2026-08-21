@@ -3,32 +3,25 @@ title: "carrier"
 subtitle: "A package manager for {box} modules"
 ---
 
-`carrier` is a command-line package manager for [{box}](https://klmr.me/box/) modules, written in Rust. `{box}` package and `carrier` are mutually exclusive: `{box}` gives R a proper module (reusable codes) system, but `carrier` does the job that gives those modules a way to be packaged, versioned, and distributed. The interface and usage is deliberately close to Python's `pip`.
+
+` {carrier}` is a command-line package manager for [{box}](https://klmr.me/box/) modules, written in Rust. `{box}` package and `carrier` are mutually exclusive: `{box}` gives R a proper module (reusable codes) system, but `carrier` does the job that gives those modules a way to be packaged, versioned, and distributed. The interface and usage is deliberately close to Python's `pip`.
 
 A `{box}` module distributed through `carrier` carries one extra file at its root: `carrier.toml`. It is a metadata file that plays the same role `DESCRIPTION` plays for an R package or `pyproject.toml` plays for a Python package (name, version, license, authors, and both R package and `{box}` module dependencies).
 
-To emulate, please refer an example `convert-proj` structure from this [repo](https://github.com/joshuamarie/carrier/tree/main/convert-proj): 
+To give `{carrier}` a try, use [{convert-proj}](https://github.com/joshuamarie/carrier/tree/main/convert-proj) as an example. 
 
-```
-convert-proj/
-├── carrier.toml
-├── README.md
-└── convert/
-    ├── __init__.R
-    ├── mass/
-    └── temp/
-```
+## Commands
 
-## What carrier does
+A following usage is `carrier <command> ...` on the command line. Here are the following primary commands:
 
-- `init` (Optional): scaffold a new module with a `carrier.toml` and an `__init__.R` entry point.
+- `init` (Optional): scaffold a new module with the most important file: `carrier.toml`.
 - `bundle`: package a module in a `.tar.gz` archive, with a `manifest.json` built from `carrier.toml`. *Disclaimer: There's `.rmbx` format which is something similar to `.whl` in Python and it hasn't finalized, yet (it is planned to be scrapped, making the `.tar.gz` as the main archive format).*
-- `install`: install a bundled archive, a local module directory, or a module living in a GitHub repo (`gh:user/repo`), and optionally resolve its R package dependencies from CRAN. Checks the installed R against the module's declared `r_version` constraint before proceeding.
+- `install`: install a bundled archive, a local module directory, or a module living in a repo (for instance, for GitHub repo: `gh:user/repo`), and optionally resolve its R package dependencies (it looks up from CRAN by default). It also checks the installed R against the module's declared `r_version` constraint before proceeding.
 - `lock`: resolve a module's R package dependencies to exact versions and write `carrier.lock`, so a later install reuses those pins instead of re-resolving against CRAN. Also checks `r_version` and records the resolving R version in the lock.
-- `remove`: uninstall a module.
+- `remove`: uninstall a module. Use `--force` to skip the prompt and outright uninstall the module. 
 
 ## Primary Application
 
-Take note that `carrier` is a CLI tool and it doesn't replace `{box}`. `carrier` acts like a "package manufacturer" involving service for packaging and a recipient for the package, so it rather sits in front of it. Once a module is installed, `box::use()` resolves it the same way it resolves any other module (see [details](installation.qmd) for the installation, as well as the patched `{box}` fork this currently requires).
+For the disclaimer, take note that `{carrier}` is a CLI tool and it doesn't replace the traditional R packages. In fact, it acts like a "package manufacturer" for `{box}` modules, so it rather give more opportunity. Once a module is installed, `box::use()` resolves it the same way it resolves any other module (see [details](installation.qmd) for the installation, as well as the patched `{box}` fork this currently requires).
 
 Start with [Get Started](getting-started.qmd) for a full walkthrough, or jump to the [CLI reference](reference/cli.qmd) if you already know what you're doing.
