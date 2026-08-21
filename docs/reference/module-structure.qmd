@@ -2,32 +2,38 @@
 title: "Module Structure"
 ---
 
+What is the usual structure of `{box}` modules to be packaged using `{carrier}`? Now that you worked with composability of R code, working with `{box}` modules is not the same as how you did with the traditional R packages. Traditional R packages have a fixed and flat structure, while `{box}` modules managed by `{carrier}` supports hierarchy and nested structure with no fixed structure on how you compose your R code in a package. 
+
 ## Layout
+
+Traditional R packages structure has a flat structure with flat `R/` directory, `man/`, `inst/`, `data/`, and `src/`. The idea is that for composability and reusability of R codes, it doesn't allow deep nested structure of codes. For the exports, you have to declare it with `NAMESPACE`, although this is not much of a big deal now we have `{devtools}` for that. But still, it is not a proper way to allow composability and reusability of R codes, and it is far from being proper module system. Other programming languages, even Julia and JavaScript, has more proper module system than R has. 
+
+`{box}` modules eliminate those constraints. In fact, `{box}` modules bring an actual proper module system and allow deep nested structure of codes, then pair it with `carrier.toml` on the root of the project directory in order to be manageable with `{carrier}`. Here's an example structure: 
 
 ```
 <project-root>/
 ├── carrier.toml
 ├── README.md
 └── <src-dir>/
-    ├── __init__.R
-    ├── mod.R
-    ├── mod2.R
+    ├── __init__.r
+    ├── mod.r
+    ├── mod2.r
     └── <submod>/
-        ├── __init__.R
-        └── example.R
+        ├── __init__.r
+        └── example.r
 ```
 
-Anyone who knows the shape of a Python package will recognize this: `<project-root>` plays the role of the package's top-level directory, `carrier.toml` plays `pyproject.toml`, and `__init__.R` plays `__init__.py`.
+Anyone who knows the shape of a Python package will recognize this: `<project-root>` plays the role of the package's top-level directory, `carrier.toml` plays `pyproject.toml`, and `__init__.r` plays `__init__.py`.
 
 ## How the source directory is resolved
 
-`carrier bundle` and `carrier install <dir>` both resolve the source directory the same way, in this order:
+Now that you made an actual package out of `{box}` module with `{carrier}`, how about sourcing the project in order to be used? These following commands: `carrier bundle` and `carrier install <dir>`, both resolve the source directory the same way, in this order:
 
-1. When `src` is set in `carrier.toml`, that path is used, resolved relative to the project root. It can be just an R script. Otherwise, it must exist as a directory and must contain `__init__.R`. Any directory name is allowed here.
-2. By default, when `src` is unset, the source directory must be named *exactly* after `module.name`. There is no fallback search; a mismatch fails the build with an explicit error naming both the expected directory and the module name.
+1. When `src` is set in `carrier.toml`, that path is used, resolved relative to the project root. It must exist as a directory, pointing `src` at a single script fails immediately, not falls back, and must contain `__init__.r` (not required on the standard `{box}` modules, but it is for `{box}` modules handled by `{carrier}`). Any directory name is allowed here.
+2. By default, when `src` is unset, the source directory must be named *exactly* after `module.name`. A mismatch fails the build with an explicit error naming both the expected directory and the module name.
 
-Either way, a missing `__init__.R` at the resolved directory's root fails immediately, with a message pointing at `__init__.R`'s role as the module's entry point.
+Either way, a missing `__init__.r` at the resolved directory's root fails immediately, with a message pointing at `__init__.r`'s role as the module's entry point. This check applies only to that one root directory, not to every nested subdirectory. A submodule, on the other hand, doesn't need its own `__init__.r` to be reachable through `box::use()`.
 
-## `__init__.R`
+## `__init__.r`
 
-This is the only file `carrier` treats specially. Everything else under the source directory is bundled as-is. The `carrier bundle` command walks the whole tree and includes every file it finds, so keep build artifacts and scratch files out of the source directory (or point `src` at a directory that doesn't contain them).
+This is the required entry point of the source directory, but not the only file `carrier` treats specially: native code directories (declared via `[native].path`, or auto-detected otherwise) are handled separately. They are rather compiled than bundled as source, and excluded from a plain bundle unless `--keep-source` is passed. Everything else under the source directory is bundled as-is, with one exception: `carrier bundle` skips any hidden (dot-prefixed) file or directory. Keep build artifacts and scratch files either out of the source directory, in a dot-prefixed path, or point `src` at a location that doesn't contain them.
