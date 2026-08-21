@@ -129,6 +129,21 @@ fn binary_file_arch(path: &Path) -> Result<Option<&'static str>> {
         }
     }
 
+    if bytes.len() >= 20 && &bytes[0..4] == b"\x7fELF" {
+        let little_endian = bytes[5] != 2;
+        let raw = [bytes[18], bytes[19]];
+        let e_machine = if little_endian {
+            u16::from_le_bytes(raw)
+        } else {
+            u16::from_be_bytes(raw)
+        };
+        return Ok(match e_machine {
+            0x3e => Some("x86_64"),  // EM_X86_64
+            0xb7 => Some("arm64"),   // EM_AARCH64
+            _ => None,
+        });
+    }
+
     if bytes.len() >= 64 && &bytes[0..2] == b"MZ" {
         // PE (.dll on Windows): the DOS header points at the real PE
         // header offset; the machine field follows the "PE\0\0" signature.

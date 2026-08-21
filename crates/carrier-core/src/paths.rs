@@ -28,6 +28,7 @@ pub struct RPlatform {
 pub enum RPlatformOs {
     Windows,
     MacOs,
+    Linux(Option<String>),
     Other,
 }
 
@@ -36,6 +37,8 @@ pub fn detect_r_platform() -> Result<RPlatform> {
         RPlatformOs::Windows
     } else if cfg!(target_os = "macos") {
         RPlatformOs::MacOs
+    } else if cfg!(target_os = "linux") {
+        RPlatformOs::Linux(detect_linux_codename())
     } else {
         RPlatformOs::Other
     };
@@ -73,6 +76,27 @@ pub fn detect_r_platform() -> Result<RPlatform> {
     Ok(RPlatform { os, r_version_short, arch })
 }
 
+/// Best-effort Ubuntu/Debian codename detection for Package Manager's
+/// `/bin/linux/<distro>-<arch>/<r-version>` binary URLs (see
+/// `cran::client::binary_url_for`). Reads `VERSION_CODENAME` from
+/// `/etc/os-release`, which Ubuntu and Debian both set. RHEL,
+/// openSUSE, and other distros generally don't set it. A `None`
+/// return there isn't an error, it just means there's nothing to
+/// build a Package Manager URL from, so the caller falls back to
+/// source, same as an unrecognized macOS architecture already does.
+fn detect_linux_codename() -> Option<String> {
+    let content = std::fs::read_to_string("/etc/os-release").ok()?;
+    for line in content.lines() {
+        if let Some(value) = line.strip_prefix("VERSION_CODENAME=") {
+            let trimmed = value.trim().trim_matches('"');
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_owned());
+            }
+        }
+    }
+    None
+}
+
 /// Detect the full major.minor.patch version of the R currently on
 /// PATH, for comparing against a module's `r_version` constraint.
 /// Deliberately separate from `detect_r_platform`'s `r_version_short`,
@@ -92,14 +116,6 @@ pub fn detect_r_version() -> Result<semver::Version> {
         .with_context(|| format!("Could not parse R version from Rscript output: '{trimmed}'"))
 }
 
-/// Resolves the R user library path where R packages should be installed.
-///
-/// Priority:
-///   1. `CARRIER_R_LIB` — explicit override (useful for renv/rv projects)
-///   2. `R_LIBS_USER`   — R's own user library variable, set by R at startup
-///   3. Subprocess fallback: `Rscript -e "cat(.libPaths()[1])"`
-///
-/// Callers are responsible for creating the directory if needed.
 pub fn resolve_r_lib_dir() -> Result<PathBuf> {
     if let Ok(lib) = std::env::var(CARRIER_R_LIB_ENV) {
         if !lib.is_empty() {

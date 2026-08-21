@@ -463,7 +463,7 @@ fn download_and_unpack(
 
 fn binary_url_for(pkg: &str, version: &str, repo_url: &str, platform: &crate::paths::RPlatform) -> Option<String> {
     let base = repo_url.trim_end_matches('/');
-    match platform.os {
+    match &platform.os {
         RPlatformOs::Windows => Some(format!(
             "{}/bin/windows/contrib/{}/{}_{}.zip",
             base, platform.r_version_short, pkg, version
@@ -493,8 +493,11 @@ fn binary_url_for(pkg: &str, version: &str, repo_url: &str, platform: &crate::pa
                 base, macos_arch, platform.r_version_short, pkg, version
             ))
         }
-        // On Linux, CRAN has no generic binaries, always source
-        RPlatformOs::Other => None,
+        RPlatformOs::Linux(Some(codename)) => Some(format!(
+            "{}/bin/linux/{}-{}/{}/src/contrib/{}_{}.tar.gz",
+            base, codename, platform.arch, platform.r_version_short, pkg, version
+        )),
+        RPlatformOs::Linux(None) | RPlatformOs::Other => None,
     }
 }
 
