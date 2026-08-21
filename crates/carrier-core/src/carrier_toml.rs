@@ -351,9 +351,9 @@ r_version = ">=4.0.0"
 
 {native_block}
 
-[test]
-framework = "testthat"
-dir = "tests"
+# [test]
+# framework = "testthat"
+# dir = "tests"
 "#
         )
     }
