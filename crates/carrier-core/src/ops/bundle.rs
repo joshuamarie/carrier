@@ -2,10 +2,10 @@ use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
 use crate::carrier_toml::{CarrierToml, DEFAULT_CRAN_MIRROR};
-use crate::formats::{rmbx, tar};
+use crate::formats::tar;
 use crate::manifest::{Dependencies, Manifest};
 
-pub fn run(path: &str, use_rmbx: bool, binary: bool, keep_source: bool) -> Result<()> {
+pub fn run(path: &str, binary: bool, keep_source: bool) -> Result<()> {
     if keep_source && !binary {
         bail!("--keep-source only applies together with --binary.");
     }
@@ -58,16 +58,10 @@ pub fn run(path: &str, use_rmbx: bool, binary: bool, keep_source: bool) -> Resul
     let cwd = std::env::current_dir()
         .context("Failed to get current working directory")?;
 
-    let ext = if use_rmbx { "rmbx" } else { "tar.gz" };
-    let output_path = cwd.join(format!("{}_{}.{}", meta.name, meta.version, ext));
+    let output_path = cwd.join(format!("{}_{}.tar.gz", meta.name, meta.version));
 
-    if use_rmbx {
-        rmbx::bundle(&src_path, &project_root, &output_path, &manifest, &exclude, &force_include)
-            .with_context(|| format!("Failed to bundle: {}", src_path.display()))?;
-    } else {
-        tar::bundle(&src_path, &project_root, &output_path, &manifest, &exclude, &force_include)
-            .with_context(|| format!("Failed to bundle: {}", src_path.display()))?;
-    }
+    tar::bundle(&src_path, &project_root, &output_path, &manifest, &exclude, &force_include)
+        .with_context(|| format!("Failed to bundle: {}", src_path.display()))?;
 
     println!(
         "Bundled '{}' ({}) -> {}",
@@ -80,17 +74,13 @@ pub fn run(path: &str, use_rmbx: bool, binary: bool, keep_source: bool) -> Resul
 }
 
 /// Used by `install` when bundling a GitHub-downloaded module.
-pub fn bundle_to(project_root: &Path, output_path: &Path, use_rmbx: bool) -> Result<()> {
+pub fn bundle_to(project_root: &Path, output_path: &Path) -> Result<()> {
     let toml = CarrierToml::from_dir(project_root)?;
     let src_path = toml.resolve_src_dir(project_root)?;
 
     let manifest = build_manifest(&toml, project_root, &src_path, None)?;
 
-    if use_rmbx {
-        rmbx::bundle(&src_path, project_root, output_path, &manifest, &[], &[])
-    } else {
-        tar::bundle(&src_path, project_root, output_path, &manifest, &[], &[])
-    }
+    tar::bundle(&src_path, project_root, output_path, &manifest, &[], &[])
 }
 
 fn build_manifest(
@@ -101,10 +91,7 @@ fn build_manifest(
 ) -> Result<Manifest> {
     let meta = &toml.module;
 
-    // let files = crate::formats::rmbx::collect_files(src_path)
-    //     .context("Failed to collect source files")?;
-    
-    let files = tar::collect_files(src_path)  
+    let files = tar::collect_files(src_path)
         .context("Failed to collect source files")?;
 
     if files.is_empty() {

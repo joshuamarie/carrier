@@ -1,5 +1,5 @@
 use carrier_core::carrier_toml::{Author, TestConfig};
-use carrier_core::formats::{rmbx, tar};
+use carrier_core::formats::tar;
 use carrier_core::lockfile::LockedPackage;
 use carrier_core::manifest::{Dependencies, Manifest, PackageDepEntry};
 use std::path::{Path, PathBuf};
@@ -187,49 +187,4 @@ fn tar_read_toml_errors_on_non_carrier_archive() {
     archive.finish().unwrap();
 
     assert!(tar::read_toml(&not_carrier).is_err());
-}
-
-#[test]
-fn rmbx_bundle_and_unpack_round_trip() {
-    let src = Scratch::new("rmbx-src");
-    make_fixture_src(src.path());
-
-    let files = rmbx::collect_files(src.path()).unwrap();
-    assert!(!files.iter().any(|f| f.contains(".hidden_file")));
-
-    let manifest = fixture_manifest("zipmod", files);
-    let archive = Scratch::new("rmbx-archive");
-    let archive_path = archive.path().join("zipmod_0.1.0.rmbx");
-
-    rmbx::bundle(src.path(), src.path(), &archive_path, &manifest, &[], &[]).unwrap();
-    assert!(archive_path.is_file());
-
-    let install = Scratch::new("rmbx-install");
-    rmbx::unpack(&archive_path, install.path()).unwrap();
-
-    assert!(install.path().join("zipmod").join("__init__.R").is_file());
-    assert!(install.path().join("zipmod").join("decomp").join("helpers.R").is_file());
-    assert!(!install.path().join("zipmod").join(".hidden_file").exists());
-
-    let dist_info = install.path().join("zipmod-0.1.0.dist-info");
-    assert!(dist_info.join("manifest.json").is_file());
-}
-
-#[test]
-fn rmbx_read_manifest_without_full_extraction() {
-    let src = Scratch::new("rmbx-readmanifest-src");
-    make_fixture_src(src.path());
-    let files = rmbx::collect_files(src.path()).unwrap();
-    let manifest = fixture_manifest("peekmod", files);
-
-    let archive = Scratch::new("rmbx-readmanifest-archive");
-    let archive_path = archive.path().join("peekmod_0.1.0.rmbx");
-    rmbx::bundle(src.path(), src.path(), &archive_path, &manifest, &[], &[]).unwrap();
-
-    let read_back = rmbx::read_manifest(&archive_path).unwrap();
-    assert_eq!(read_back.name, "peekmod");
-    assert_eq!(read_back.version, "0.1.0");
-    assert_eq!(read_back.license, "MIT");
-    assert!(read_back.locked_packages.is_some());
-    assert!(read_back.test.is_some());
 }
