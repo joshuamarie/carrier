@@ -142,26 +142,6 @@ fn bundle_produces_tar_gz_by_default() {
     assert!(cwd.path().join("mymod_0.1.0.tar.gz").is_file());
 }
 
-#[test]
-fn bundle_rmbx_flag_produces_rmbx_extension() {
-    let cwd = Scratch::new("bundle-rmbx-cwd");
-    let project = cwd.path().join("mymod-proj");
-
-    carrier_cmd()
-        .args(["init", "mymod", "--dir-name", project.to_str().unwrap()])
-        .assert()
-        .success();
-
-    carrier_cmd()
-        .current_dir(cwd.path())
-        .args(["bundle", project.to_str().unwrap(), "--rmbx"])
-        .assert()
-        .success();
-
-    assert!(cwd.path().join("mymod_0.1.0.rmbx").is_file());
-    assert!(!cwd.path().join("mymod_0.1.0.tar.gz").exists());
-}
-
 // ---- install / remove ----
 
 #[test]
@@ -205,7 +185,7 @@ fn install_on_nonexistent_source_fails_with_clear_error() {
 
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("Expected a directory, .tar.gz, .rmbx, or gh:username/repo"),
+        stderr.contains("Expected a directory, .tar.gz, or gh:username/repo"),
         "stderr was:\n{stderr}"
     );
 }
