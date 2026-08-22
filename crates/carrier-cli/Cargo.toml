@@ -13,9 +13,9 @@ path = "src/lib.rs"
 name = "carrier"
 path = "src/bin/carrier.rs"
 
-# [[bin]]
-# name = "crr"
-# path = "src/bin/crr.rs"
+[[bin]]
+name = "box-crr"
+path = "src/bin/crr.rs"
 
 [dependencies]
 carrier-core = { path = "../carrier-core", features = ["network"] }
