@@ -68,7 +68,8 @@ Here's an example structure of the module:
     ├── mod2.r
     └── <submod>/
         ├── __init__.r
-        └── example.r
+        ├── example.r
+        └── ...
 ```
 
 And the structure can go deeper than this. If you know the structure of Python packages, this feels familiar to you. 
@@ -104,6 +105,8 @@ And the structure can go deeper than this. If you know the structure of Python p
     <!-- ``` bash -->
     <!-- carrier install <name-of-the-module>.rmbx --global -->
     <!-- ``` -->
+
+    Note: Running `carrier install <module>`, where `<module>` is just a bare name, no prefixes or whatsoever, is valid but reserved for installation of packages from a remote repository. `{carrier}` is still at its early stage, and I would like to hear words from you, feedback is very welcome. 
 
 4.  Remove the installed module
 
