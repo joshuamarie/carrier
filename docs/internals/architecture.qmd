@@ -1,5 +1,7 @@
 ---
-title: "Architecture"
+title: "Dependency Resolution"
+subtitle: "{carrier} internals explanations"
+description: "Articles only suitable for developers"
 ---
 
 ## Workspace layout

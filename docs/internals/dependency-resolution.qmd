@@ -1,24 +1,26 @@
 ---
 title: "Dependency Resolution"
+subtitle: "{carrier} internals explanations"
+description: "Articles only suitable for developers"
 ---
 
-This page covers how `carrier` resolves dependencies: `cran::client::install_packages` for R package dependencies, and `ops::module_graph::resolve_transitive` for `carrier`-installed module dependencies. It specifically covers what actually runs when `carrier install --install-deps` resolves and installs R package dependencies, and what runs when a module's `module_deps` are walked transitively.
+This article covers how `{carrier}` resolves dependencies internally, walking through two Rust functions: `cran::client::install_packages` for R package dependencies, and `ops::module_graph::resolve_transitive` for `carrier`-installed module dependencies. Specifically: what runs when `carrier install --install-deps` resolves and installs R packages, and what runs when a module's `module_deps` gets walked transitively.
 
 ## Grouping and fetch
 
-Requested packages are grouped by repo first, so each repo's `PACKAGES.gz` index is fetched exactly once per `carrier install` run, no matter how many packages come from it. The fetch itself retries: three attempts, exponential backoff (`2^attempt` seconds) between them, on both non-2xx responses and request failures.
+Requested packages are grouped by repo first, so each repo's `PACKAGES.gz` index gets fetched exactly once per `carrier install` run, no matter how many packages come from it. The fetch retries: three attempts, exponential backoff (`2^attempt` seconds) between them, on both non-2xx responses and request failures.
 
 ## Graph walk
 
 For each repo group, `resolve_install_set` walks the dependency graph breadth-first starting from the requested packages:
 
-1. Every requested package's version spec is queued.
-2. For each package popped off the queue, its record is looked up in the fetched index. **A package missing from the index is a warning, not a failure** — it's skipped, and anything that only that package would have pulled in is skipped with it. See [Known Gaps](known-gaps.qmd).
-3. Its `Imports`/`Depends` fields are parsed into further (package, spec) pairs, base and recommended R packages filtered out, and pushed onto the same queue.
+1.  Every requested package's version spec is queued.
+2.  For each package popped off the queue, its record is looked up in the fetched index. A package missing from the index just gets skipped with a warning printed, not a hard failure, and anything that only that package would have pulled in gets skipped along with it.
+3.  Its `Imports`/`Depends` fields are parsed into further (package, spec) pairs, base and recommended R packages filtered out, and pushed onto the same queue.
 
 ## Cross-repo consistency
 
-A package already resolved by an earlier repo group in the same run is not re-resolved. Instead, its already-chosen version is checked against the current repo's constraints for that package; if it satisfies them, it's reused as-is, and if it doesn't, the whole install fails loudly with both repos named. This is what stops a package pulled in transitively from two different repos from silently ending up at two different versions depending on processing order.
+A package already resolved by an earlier repo group in the same run doesn't get resolved a second time. Its already-chosen version is checked against the current repo's constraints for that package instead: reused as-is if it satisfies them, or the whole install fails loudly naming both repos if it doesn't. That's what stops a package pulled in transitively from two different repos from silently landing on two different versions depending on which repo happened to get processed first.
 
 ## Version selection
 
@@ -26,43 +28,55 @@ For each package, the index's listed version is tried against all collected spec
 
 ## Install order and installation
 
-Resolved packages are installed in dependency order (a straightforward DFS-based topological sort over the resolved set). For each one, an existing install with a matching version already in the target library is left alone; anything else is (re)installed.
+Resolved packages install in dependency order, a straightforward DFS-based topological sort over the resolved set. For each one, an existing install with a matching version already in the target library is left alone. Anything else gets (re)installed.
 
-Installation itself prefers a binary archive over building from source:
+Installation prefers a binary archive over building from source, but what counts as "a binary is available" differs by platform, and by what repo you've configured.
 
-1. **Binary first**, when the platform is Windows or macOS (`bin/windows/contrib/<r-version>/<pkg>_<version>.zip` or `bin/macosx/contrib/<r-version>/<pkg>_<version>.tgz`). Linux has no generic CRAN binaries, so this step is skipped there entirely.
-2. A downloaded binary archive is only trusted if it contains `Meta/package.rds` — a real built package always has it, a source tree never does. This rejects a source tarball served where a binary was expected (or a truncated download) before it's ever unpacked into the library.
-3. **Source fallback**: `<repo>/src/contrib/<pkg>_<version>.tar.gz`, then `Archive/<pkg>/<pkg>_<version>.tar.gz` on 404, then `<pkg>_<version>.9000.tar.gz` (a CRAN dev-version convention) on 404 again — each downloaded tarball is handed to `R CMD INSTALL --no-multiarch --no-docs --no-help`.
+### Where the binary URL comes from
 
-A failed install of a **directly requested** package aborts the whole run. A failed install of a package that only showed up as a transitive dependency is logged as a warning and the run continues.
+1.  If you are on Windows, `{carrier}` tries to fetch at   `bin/windows/contrib/<r-version>/<pkg>_<version>.zip`, against whatever repo is configured. CRAN's default mirror has always served this.
+2.  If you are on MacOS, `{carrier}` then tries to fetch at `bin/macosx/<macos-arch>/contrib/<r-version>/<pkg>_<version>.tgz`, also against the configured repo directly, no special repo required. `<macos-arch>` is `big-sur-arm64` or `big-sur-x86_64`, picked from `R.version$arch`. This is deliberately not the flat `bin/macosx/contrib/` path some mirrors still serve: that legacy path is x86_64-only, and using it unconditionally hands an Intel binary to an Apple Silicon machine, which only fails later at `dlopen()` time, not at install time. An architecture `binary_url_for` doesn't recognize skips the binary attempt entirely and goes straight to source, with a warning.
+3.  If you work on some Linux distros, it only works against a Package Manager-style repo (Posit Package Manager, formerly RSPM), and only when a distro codename could be detected from `/etc/os-release`'s `VERSION_CODENAME` field (Ubuntu and Debian set this; RHEL and openSUSE generally don't). When both hold, the URL is `<repo>/bin/linux/<distro>-<arch>/<r-version>/src/contrib/<pkg>_<version>.tar.gz`. CRAN's default mirror has no such tree at all, so on a plain `cloud.r-project.org` repo, or an unrecognized distro, this step never even fires. There's no dependency on `install.packages()`'s usual user-agent sniffing here: distro, architecture, and R version are all spelled out in the URL itself, which is exactly why this scheme was picked over Package Manager's other `__linux__/<distro>` URL format.
+
+### Verifying what came back
+
+A downloaded binary archive is only trusted if it contains `Meta/package.rds`. A real, pre-built package always has it — a source tree never does. This catches a source tarball served where a binary was expected, or a truncated download, before either is ever unpacked into the library.
+
+Every compiled library inside the archive (`.so`, `.dll`, `.dylib`) gets its actual architecture read straight out of its own header (ELF, PE, or Mach-O respectively) and checked against what the current machine needs. This isn't redundant with picking the right URL: Package Manager has been observed returning HTTP 200 for an architecture-tagged URL even when the file it serves doesn't match, instead of the clean 404 a plain CRAN mirror gives for the same kind of miss. A URL-only check would silently accept that.
+
+### Falling back to source
+
+`<repo>/src/contrib/<pkg>_<version>.tar.gz`, then `Archive/<pkg>/<pkg>_<version>.tar.gz` on a 404, then `<pkg>_<version>.9000.tar.gz` (CRAN's dev-version convention) on a second 404. Whichever tarball comes back gets handed to `R CMD INSTALL --no-multiarch --no-docs --no-help`.
+
+A failed install of a **directly requested** package aborts the whole run. A failed install of a package that only showed up as a transitive dependency gets logged as a warning, and the run continues.
 
 ## Archive extraction safety
 
-Both the `.zip` and `.tar.gz` binary-extraction paths sanitize every entry path before writing anything to disk: absolute paths and any `..` component are rejected outright, and on Unix, symlink targets are dropped if they're absolute or contain a parent-directory component. Extraction always lands in a temp staging directory first; only after `Meta/package.rds` is confirmed does the staged package get moved into the real library — via a rename, falling back to a recursive copy if staging and the library live on different filesystems.
+Both the `.zip` and `.tar.gz` binary-extraction paths sanitize every entry path before writing anything to disk. Absolute paths and any `..` component get rejected outright, and on Unix, a symlink target gets dropped if it's absolute or contains a parent-directory component. Extraction always lands in a temp staging directory first. Only after `Meta/package.rds` is confirmed does the staged package get moved into the real library, via a rename, falling back to a recursive copy if staging and the library happen to live on different filesystems.
 
 ## Module dependency graph
 
-::: {.callout-caution title="Note for readers" icon=false}
+::: {.callout-caution title="Note for readers" icon="false"}
 *This is for developers under development*
 :::
 
-`carrier`-installed modules (`module_deps` in `carrier.toml`) resolve through a separate path from R packages: `resolve_transitive` in `ops::module_graph`. It shares no code with the CRAN resolution above, no repo grouping, no binary/source install step, and no CRAN index, because a module dependency is fetched as a whole `carrier.toml` from its declared `source` (see [carrier.toml](../reference/carrier-toml.qmd#module_deps)), not resolved against a package index.
+`carrier`-installed modules (`module_deps` in `carrier.toml`) resolve through a completely separate path from R packages: `resolve_transitive` in `ops::module_graph`. It shares no code with the CRAN resolution above. No repo grouping, no binary/source install step, no CRAN index. A module dependency gets fetched as a whole `carrier.toml` from its declared `source` (see [carrier.toml](../reference/carrier-toml.qmd#module_deps)), not resolved against a package index.
 
 ### Why this walk is DFS, not BFS
 
-The graph is walked depth-first, It keeps an explicit ancestor path (the chain of module names from the root down to whatever's currently being resolved) — deliberately, not as an implementation detail. A "have I seen this module name before" set alone can't tell a real dependency cycle (A depends on B depends on A) apart from an ordinary diamond dependency (two modules both depending on the same third module) — both look identical as "this name showed up twice." Only ancestry, whether the name is still an open call on the current path, versus already finished and closed off, distinguishes them. A queue-based (BFS) walk has no notion of ancestry, only of what's been dequeued; only a call stack (or an explicit path "Vec" standing in for one) does.
+The graph is walked depth-first on purpose, keeping an explicit ancestor path: the chain of module names from the root down to whatever's currently being resolved. This isn't an implementation detail you could swap out. A "have I seen this module name before" set on its own can't tell a real dependency cycle (A depends on B depends on A) apart from an ordinary diamond dependency (two modules both depending on the same third module). Both just look like "this name showed up twice." Only ancestry, whether the name is still an open call on the current path versus already finished and closed off, tells them apart. A queue-based (BFS) walk has no notion of ancestry, only of what's already been dequeued. Only a call stack, or an explicit path `Vec` standing in for one, gives you that.
 
 ### Resolution steps, per module dependency
 
-1. If the module name is already fully resolved (from an earlier branch of the walk, a diamond), its resolved version and source are checked for consistency against the current dependent's constraint instead of being fetched again. A mismatched `source` or an incompatible version constraint fails loudly, which names both requesters.
-2. If the module name is already on the current ancestor path, that's a real cycle. The walk fails with the full chain (e.g. `a -> b -> a`) rather than looping.
-3. A `module_deps` entry with no `source` fails immediately (as of now), which there's no default module registry to fall back to (unlike `package_deps`, which defaults to CRAN).
-4. Otherwise, the dependency's `carrier.toml` is fetched from its `source`. Its declared `module.version` is checked against the requesting constraint, its own `package_deps` are folded into the same package-resolution set used everywhere else, and its own `module_deps` are recursed into.
+1.  If the module name is already fully resolved, from an earlier branch of the walk, a diamond, its resolved version and source get checked for consistency against the current dependent's constraint instead of being fetched again. A mismatched `source` or an incompatible version constraint fails loudly, and will name both requesters.
+2.  If you have a module name that is already on the current ancestor path, that's a real cycle. The walk fails with the full chain (e.g. `a -> b -> a`) instead of looping forever.
+3.  If ever you have module dependencies carried by `{carrier}` and it is written under `module_deps` entry with no `source`, the resolution fails immediately as of current version, since there's no default module registry to fall back to (unlike `package_deps`, which defaults to CRAN).
+4.  Otherwise, the dependency's `carrier.toml` gets fetched from its `source`. Its declared `module.version` is checked against the requesting constraint, its own `package_deps` fold into the same package-resolution set used everywhere else, and its own `module_deps` get recursed into.
 
 ### What fetches a module
 
 `ModuleFetcher` is a small trait. `resolve_transitive()` only knows how to walk the graph, not how to fetch a `carrier.toml`. The production implementation, `GitHubFetcher`, understands `gh:user/repo` sources (optionally pinned via `gh:user/repo/tree/<ref>/<subpath>`, see [CLI Commands](cli.qmd#carrier-install)) and requires the `network` feature, same as `carrier install`'s own `gh:` handling.
 
 ::: {.callout-note title="Technical Notes"}
-`resolve_transitive()` exists and is tested, but `carrier lock` doesn't call it (yet, as of now). The current `carrier lock` uses the shallow, single-level `resolve()`, which doesn't fetch anything for `module_deps`. Transitive module resolution isn't wired into any CLI command yet. 
+`resolve_transitive()` exists and is tested, but `carrier lock` doesn't call it yet. The current `carrier lock` uses the shallow, single-level `resolve()`, which doesn't fetch anything for `module_deps`. Transitive module resolution isn't wired into any CLI command yet.
 :::
