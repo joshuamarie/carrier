@@ -390,12 +390,16 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
         return Ok(());
     }
 
+    let mut cleared_lib_dirs: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
     for native_dir in &native_dirs {
         let target_dir = native_dir.parent().unwrap_or(module_path);
-        let artifact_name = native_dir
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or(name);
+        let lib_dir = target_dir.join(".lib");
+        if cleared_lib_dirs.insert(lib_dir.clone()) && lib_dir.exists() {
+            std::fs::remove_dir_all(&lib_dir)
+                .with_context(|| format!("Failed to clear {}", lib_dir.display()))?;
+        }
+
+        let artifact_name = crate::ops::compile::binary_name(native_dir, name);
 
         println!("Building native code for '{}' ({})...", name, native_dir.display());
         let outcome = carrier_native::build(target_dir, native_dir, artifact_name, name)

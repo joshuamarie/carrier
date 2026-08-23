@@ -38,6 +38,7 @@ pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
         return Ok(Vec::new());
     }
 
+    let mut cleared_lib_dirs: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
     let mut compiled = Vec::new();
     for native_dir in &native_dirs {
         if !native_dir.is_dir() {
@@ -48,12 +49,15 @@ pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
         }
 
         let target_dir = native_dir.parent().unwrap_or(project_root);
-        let artifact_name = native_dir
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or(&name);
+        let lib_dir = target_dir.join(".lib");
+        if cleared_lib_dirs.insert(lib_dir.clone()) && lib_dir.exists() {
+            std::fs::remove_dir_all(&lib_dir)
+                .with_context(|| format!("Failed to clear {}", lib_dir.display()))?;
+        }
 
-        let outcome = carrier_native::build(target_dir, native_dir, artifact_name, &name)
+        let binary_name = binary_name(native_dir, &name);
+
+        let outcome = carrier_native::build(target_dir, native_dir, binary_name, &name)
             .with_context(|| format!("Failed to compile native code for '{}' at {}", name, native_dir.display()))?;
 
         compiled.push(CompiledArtifact {
@@ -76,4 +80,16 @@ pub struct CompiledArtifact {
     pub r_version: String,
     pub source_hash: String,
     pub from_cache: bool,
+}
+
+/// Names the compiled artifact after the native dir's own folder
+/// (`cpp`, `c`) so multiple native dirs sharing one parent don't
+/// collide on the same output filename. A generic `src` carries no
+/// disambiguating information though, just noise in `.lib/`, so falls
+/// back to the module's own name instead in that one case.
+pub fn binary_name<'a>(native_dir: &'a Path, module_name: &'a str) -> &'a str {
+    match native_dir.file_name().and_then(|f| f.to_str()) {
+        Some("src") | None => module_name,
+        Some(folder) => folder,
+    }
 }
