@@ -65,8 +65,6 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str, cache_key_
     check_unhandled_sources(native_dir)?;
     check_cpp_fortran_mix_experimental(native_dir)?;
 
-    crate::detect::check_foreign_sources(native_dir)?;
-
     let ext = run_rscript_capture("cat(.Platform$dynlib.ext)")?;
     let target_triple = run_rscript_capture("cat(R.version$platform)")?;
     let r_version = run_rscript_capture(
