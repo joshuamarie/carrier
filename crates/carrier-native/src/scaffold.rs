@@ -47,7 +47,7 @@ fn template_for(lang: NativeLang, backend: Option<Backend>) -> Result<Template> 
             },
         }),
         NativeLang::Fortran => anyhow::bail!(
-            "Fortran scaffolding isn't supported yet — the build pipeline doesn't compile .f90 sources."
+            "Fortran scaffolding isn't supported yet, as the build pipeline doesn't compile `*.f` sources as of current version."
         ),
     }
 }
@@ -87,7 +87,7 @@ pub fn native_dir_name(_lang: NativeLang) -> &'static str {
 /// Scaffold a module's native code and R glue:
 ///   `<module_dir>/<lang>/{hello,add}.<ext>` + `Makevars`
 ///   `<module_dir>/{hook,hello,add,__init__}.r`
-/// `hook.r` is placed in `module_dir`, not the native subdir, deliberately —
+/// `hook.r` is placed in `module_dir`, not the native subdir, deliberately.
 /// `toolchain::build()` moves the compiled artifact up to `module_dir` so
 /// `box::file()` (called from `hook.r`) resolves next to it.
 /// Returns the paths written, relative to `module_dir`, for the caller

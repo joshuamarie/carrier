@@ -80,7 +80,7 @@ fn looks_like_path(s: &str) -> bool {
 fn parse_source(s: &str, repo: Option<&str>) -> Result<InstallSource> {
     if let Some(rest) = s.strip_prefix("gh:") {
         if repo.is_some() {
-            bail!("--repo doesn't apply to gh: sources — the repository is already given in the gh: path.");
+            bail!("--repo doesn't apply to gh: sources, the repository is already given in the gh: path.");
         }
         let gh = parse_github_source(rest)?;
         return Ok(InstallSource::GitHub {
@@ -97,7 +97,7 @@ fn parse_source(s: &str, repo: Option<&str>) -> Result<InstallSource> {
 
     if looks_like_path(s) || has_archive_extension {
         if repo.is_some() {
-            bail!("--repo doesn't apply to local paths or archive files — '{}' already names a specific file or directory.", s);
+            bail!("--repo doesn't apply to local paths or archive files, '{}' already names a specific file or directory.", s);
         }
         if path.is_dir() {
             return Ok(InstallSource::Dir(path));
@@ -105,7 +105,7 @@ fn parse_source(s: &str, repo: Option<&str>) -> Result<InstallSource> {
         return match path.extension().and_then(|e| e.to_str()) {
             Some("gz") => Ok(InstallSource::Tar(path)),
             _ => bail!(
-                "Expected a directory, .tar.gz, or gh:username/repo — got '{}'.",
+                "Expected a directory, .tar.gz, or gh:username/repo, got '{}'.",
                 s
             ),
         };
@@ -168,7 +168,7 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&Carrie
 
     // A dir/github install passes a lock read fresh from the source
     // project. A standalone .tar.gz has no project directory to read
-    // one from — fall back to whatever `carrier bundle` baked into the
+    // one from, fall back to whatever `carrier bundle` baked into the
     // archive's manifest.json at bundle time.
     let embedded_lock = tar::read_manifest(tar_path)?
         .locked_packages
@@ -275,7 +275,7 @@ fn install_from_github(_user: &str, _repo: &str, _git_ref: Option<&str>, _subpat
 }
 
 /// The real ModuleFetcher used by resolve_transitive() outside of tests.
-/// Only understands `gh:user/repo` sources today — anything else is a
+/// Only understands `gh:user/repo` sources today, anything else is a
 /// clear error rather than a silent no-op, since a resolver that
 /// pretends to resolve something it can't fetch is worse than one that
 /// says so plainly.
@@ -286,7 +286,7 @@ pub struct GitHubFetcher;
 impl ModuleFetcher for GitHubFetcher {
     fn fetch(&self, source: &str) -> Result<CarrierToml> {
         let rest = source.strip_prefix("gh:").ok_or_else(|| {
-            anyhow::anyhow!("Unsupported module source '{source}' — only gh: sources can be fetched right now.")
+            anyhow::anyhow!("Unsupported module source '{source}', only gh: sources can be fetched right now.")
         })?;
         let gh = parse_github_source(rest)?;
 
@@ -332,13 +332,13 @@ impl ModuleFetcher for GitHubFetcher {
     }
 }
 
-/// Not implemented yet — there's no module registry protocol defined.
+/// Not implemented yet, there's no module registry protocol defined.
 /// This exists so the CLI surface (--repo flag, arg threading, mutual
 /// exclusivity with gh:/local sources) is already wired and tested; once
 /// a real registry protocol exists, only this function's body changes.
 fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<()> {
     bail!(
-        "Module registries aren't implemented yet — wanted to install '{name}' from '{repo}'.\n\
+        "Module registries aren't implemented yet, wanted to install '{name}' from '{repo}'.\n\
          For now, install directly: a local path, or gh:user/repo."
     )
 }
@@ -346,7 +346,7 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
 /// Compiles a module's native code, if it has any, right after
 /// unpacking. `module_path` is the module's own flat installed
 /// directory (`<install_dir>/<n>`). Native code isn't assumed to
-/// live in one blessed spot — `find_native_dirs` walks the whole
+/// live in one blessed spot, `find_native_dirs` walks the whole
 /// installed tree, so a module can have several compiled-code dirs
 /// nested under different submodules (`mass/src/`, `temp/src/`, ...).
 ///
@@ -384,7 +384,7 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
 
     if !install_deps {
         println!(
-            "  [native] {} has compiled code — build with: carrier install --install-deps",
+            "  [native] {} has compiled code, build with: carrier install --install-deps",
             name
         );
         return Ok(());
@@ -399,7 +399,7 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
                 .with_context(|| format!("Failed to clear {}", lib_dir.display()))?;
         }
 
-        let artifact_name = crate::ops::compile::binary_name(native_dir, name);
+        let artifact_name = crate::ops::compile::artifact_name(native_dir, name);
 
         println!("Building native code for '{}' ({})...", name, native_dir.display());
         let outcome = carrier_native::build(target_dir, native_dir, artifact_name, name)

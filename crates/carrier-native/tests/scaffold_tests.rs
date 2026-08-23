@@ -135,6 +135,21 @@ fn has_native_src_true_for_bare_c_file_no_makevars() {
 }
 
 #[test]
+fn has_native_src_true_for_bare_fortran_file_no_makevars() {
+    let scratch = TempScratchDir::new("detect-fortran-no-makevars");
+    std::fs::write(scratch.path().join("add.f90"), "! no makevars here").unwrap();
+    assert!(carrier_native::detect::has_native_src(scratch.path()));
+}
+
+#[test]
+fn has_native_src_true_for_c_and_fortran_together() {
+    let scratch = TempScratchDir::new("detect-c-and-fortran");
+    std::fs::write(scratch.path().join("hello.c"), "").unwrap();
+    std::fs::write(scratch.path().join("add.f90"), "").unwrap();
+    assert!(carrier_native::detect::has_native_src(scratch.path()));
+}
+
+#[test]
 fn has_native_src_false_for_empty_dir() {
     let scratch = TempScratchDir::new("detect-empty");
     assert!(!carrier_native::detect::has_native_src(scratch.path()));
@@ -150,7 +165,8 @@ fn scaffold_pure_r_writes_expected_files_only() {
         assert!(scratch.path().join(expected).exists(), "missing {expected} on disk");
     }
 
-    // No native dir, no hook.r — that's the whole point of this path.
+    // No native dir, no hook.r
+    // That's the whole point of this path.
     assert!(!scratch.path().join("hook.r").exists());
     assert!(!scratch.path().join("c").exists());
     assert!(!scratch.path().join("cpp").exists());

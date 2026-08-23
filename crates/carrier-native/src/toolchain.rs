@@ -7,14 +7,14 @@ use crate::cache::{cache_dir, source_hash};
 
 #[derive(Debug)]
 pub struct BuildOutcome {
-    /// Where the compiled artifact ended up —
+    /// Where the compiled artifact ended up:
     /// `<module_dir>/<module_name><dynlib_ext>`, next to `__init__.R`,
     /// since `box::file()` resolves relative to whichever module
     /// calls it, not wherever `[native].path` points. `module_dir`
     /// and `module_name` here mean whichever directory owns this
-    /// particular native dir — a submodule's own dir and name when a
+    /// particular native dir (a submodule's own dir and name when a
     /// module has several scattered compiled-code dirs, not
-    /// necessarily the top-level module.
+    /// necessarily the top-level module).
     pub artifact_path: PathBuf,
     pub source_hash: String,
     /// `R.version$platform`, e.g. `x86_64-pc-linux-gnu`. Not a real
@@ -57,10 +57,15 @@ pub struct BuildOutcome {
 pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str, cache_key_name: &str) -> Result<BuildOutcome> {
     if !crate::detect::has_native_src(native_dir) {
         bail!(
-            "No Makevars or .c/.cpp/.cc/.cxx sources found in {} — nothing to compile.",
+            "No Makevars or .c/.cpp/.cc/.cxx/.f/.f90 sources found in {}, nothing to compile.",
             native_dir.display()
         );
     }
+
+    check_unhandled_sources(native_dir)?;
+    check_cpp_fortran_mix_experimental(native_dir)?;
+
+    crate::detect::check_foreign_sources(native_dir)?;
 
     let ext = run_rscript_capture("cat(.Platform$dynlib.ext)")?;
     let target_triple = run_rscript_capture("cat(R.version$platform)")?;
@@ -102,7 +107,7 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str, cache_key_
     let sources = native_sources(native_dir)?;
     if sources.is_empty() {
         bail!(
-            "Makevars found but no .c/.cpp/.cc/.cxx sources in {}",
+            "Makevars found but no .c/.cpp/.cc/.cxx/.f/.f90 sources in {}",
             native_dir.display()
         );
     }
@@ -174,7 +179,7 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str, cache_key_
 /// in Rust, same as s`ource_hash()`. No C/C++ source would ever
 /// legitimately live there, so recursing into it is pure waste at
 /// best and a correctness risk at worst.
-fn native_sources(native_dir: &Path) -> Result<Vec<String>> {
+pub fn native_sources(native_dir: &Path) -> Result<Vec<String>> {
     let mut entries: Vec<PathBuf> = walkdir::WalkDir::new(native_dir)
         .into_iter()
         .filter_entry(|e| e.file_name().to_str() != Some("target"))
@@ -189,6 +194,7 @@ fn native_sources(native_dir: &Path) -> Result<Vec<String>> {
         if matches!(
             path.extension().and_then(|e| e.to_str()),
             Some("c") | Some("cpp") | Some("cc") | Some("cxx")
+                | Some("f") | Some("f90") | Some("f95") | Some("f03")
         ) {
             let rel = path.strip_prefix(native_dir).unwrap_or(&path);
             out.push(rel.to_string_lossy().replace('\\', "/"));
@@ -211,6 +217,105 @@ fn locate_binary(name: &str) -> String {
         }
     }
     name.to_owned()
+}
+
+/// `R CMD SHLIB` itself handles a real `src/` mixing `.c`/`.cpp`/`.f`
+/// fine, links everything into one `.so`, that's an established R
+/// package pattern, not a carrier concern. Carrier compiles
+/// `.c`/`.cpp`/`.cc`/`.cxx` and `.f`/`.f90`/`.f95`/`.f03`; anything
+/// else (a stray `.py`, a leftover `.rs`) is silently excluded from
+/// the build with no feedback. Headers and `Makevars` are expected to
+/// be there and stay quiet. Everything else gets a warning: nothing
+/// here is dangerous enough to block a build over, it just deserves
+/// an answer to "why isn't this file doing anything."
+pub fn check_unhandled_sources(native_dir: &Path) -> Result<()> {
+    const HEADER_EXTENSIONS: &[&str] = &["h", "hpp", "hh", "hxx"];
+
+    let mut unrecognized = Vec::new();
+
+    for entry in walkdir::WalkDir::new(native_dir)
+        .into_iter()
+        .filter_entry(|e| e.file_name().to_str() != Some("target"))
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if name == "Makevars" || name == "Makevars.win" {
+            continue;
+        }
+
+        let ext = path.extension().and_then(|e| e.to_str()).map(str::to_lowercase);
+        match ext.as_deref() {
+            Some("c") | Some("cpp") | Some("cc") | Some("cxx")
+                | Some("f") | Some("f90") | Some("f95") | Some("f03") => {}
+            Some(e) if HEADER_EXTENSIONS.contains(&e) => {}
+            _ => unrecognized.push(path.to_path_buf()),
+        }
+    }
+
+    if !unrecognized.is_empty() {
+        eprintln!(
+            "Note: {} file(s) in {} won't be compiled (not .c/.cpp/.cc/.cxx/.f/.f90/.f95/.f03):",
+            unrecognized.len(),
+            native_dir.display()
+        );
+        for f in &unrecognized {
+            eprintln!("  {}", f.display());
+        }
+    }
+
+    Ok(())
+}
+
+/// EXPERIMENTAL: refuses to build a native dir that mixes C++ and
+/// Fortran sources. Grounded in Writing R Extensions section 1.2: "we do not
+/// support using both C++ and Fortran." Scoped to one native dir at a
+/// time; C++ and Fortran each work fine on their own, and together
+/// across two separate `[native].path` entries (each compiled into
+/// its own artifact, never sharing a link step).
+///
+/// Marked experimental on purpose: this is carrier's own enforcement
+/// of a restriction R states but doesn't itself check for at build
+/// time. If real usage shows it's too strict, or the wrong shape
+/// entirely, delete this function and its one call site in build();
+/// nothing else in the pipeline depends on it.
+pub fn check_cpp_fortran_mix_experimental(native_dir: &Path) -> Result<()> {
+    const CPP_EXTENSIONS: &[&str] = &["cpp", "cc", "cxx"];
+    const FORTRAN_EXTENSIONS: &[&str] = &["f", "f90", "f95", "f03"];
+
+    let mut has_cpp = false;
+    let mut has_fortran = false;
+
+    for entry in walkdir::WalkDir::new(native_dir)
+        .into_iter()
+        .filter_entry(|e| e.file_name().to_str() != Some("target"))
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        match entry
+            .path()
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_lowercase)
+            .as_deref()
+        {
+            Some(e) if CPP_EXTENSIONS.contains(&e) => has_cpp = true,
+            Some(e) if FORTRAN_EXTENSIONS.contains(&e) => has_fortran = true,
+            _ => {}
+        }
+    }
+
+    if has_cpp && has_fortran {
+        bail!(
+            "{} mixes C++ and Fortran sources in one native dir. Writing R Extensions: \
+             \"we do not support using both C++ and Fortran.\" Split them into separate \
+             [native].path entries instead, each building its own artifact.",
+            native_dir.display()
+        );
+    }
+
+    Ok(())
 }
 
 fn run_rscript_capture(expr: &str) -> Result<String> {
