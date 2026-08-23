@@ -6,7 +6,7 @@ Regular R packages have decades of established convention for compiled code: `sr
 
 `{box}`-`{carrier}` modules can contain native code (C, C++, ...), compiled via `R CMD SHLIB`. The R-side loading, `dyn.load()`/`dyn.unload()` wired to a module's `.on_load`/`.on_unload` hooks, isn't automatic just because a native directory exists. The current solution `{carrier}` has comes from `hook.r`, which `carrier init --native` scaffolds once, at that moment. If you add native code to a module some other way, for example dropping a `Makevars` into an existing module without re-running `--native` init, nothing writes that loading glue for you. You're back to the manual steps the box vignette describes, for that module.
 
-The practical difference from classic R packages is explicit: You are not forced to put native sources in a directory named `src/`. Any directory name is fine, as long as `{carrier}` can find it, either by automatic discovery or by an explicit `[native]` entry (see [The `[native]` block](#native-block)).
+The practical difference from classic R packages is explicit: You are not forced to put native sources in a directory named `src/`. Any directory name is fine, as long as `{carrier}` can find it, either by automatic discovery (this is `src/` by default) or by an explicit `[native]` entry (see [The `[native]` block](#native-block)).
 
 ## Enabling native code in a module
 
@@ -50,7 +50,7 @@ build_deps = { Rcpp = "*" }
 
 -   `path` is where this module's native source lives, relative to the module's own resolved source directory (the same base `[module].src` uses), not the project root where `carrier.toml` lives. It accepts either a single string, for one native-code location, or an array, for a module with more than one (e.g. `path = ["cpp1", "cpp2"]`). A configuration here, either a single location or a multiple locations, are just two shapes of the same source (`src`) field, not two separate keys.
 
-    When `path` isn't set, `{carrier}` scans the module's whole source tree and treats every qualifying directory as its own native dir (see below).
+    When `path` isn't set, `{carrier}` scans the module's whole source tree and treats every qualifying directory as its own native dir (see below). Also, when `src/` is named, the name of the compiled artifact comes from the name of the module. 
 
 -   `build_deps` configures external dependencies, most commonly R packages, needed only to *compile* (e.g. `Rcpp`, `cpp11`, whatever `Makevars` needs via `system.file()`). This does not imply a runtime dependency. If the compiled code also needs the package loaded at runtime, list it in `[package_deps]` too.
 
