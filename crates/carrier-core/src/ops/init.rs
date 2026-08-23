@@ -45,12 +45,12 @@ pub fn run(
         "README.md".to_string(),
     ];
     
-    // TODO: this scaffolds the native dir with real, buildable example
-    // code now. It still does NOT write a [native] block into
-    // carrier.toml, so `carrier install --install-deps` won't find
-    // this dir on its own until that's wired up too.
+    // Scaffolds the native dir with real, buildable example code, and
+    // default_template() already writes a [native] block with
+    // build_deps. path is deliberately omitted there — resolve_native_dirs()
+    // auto-detects src/ (and any other native dir) on its own.
     if let Some(lang) = native {
-        let scaffolded = carrier_native::scaffold::scaffold(&src_dir, lang, backend)
+        let scaffolded = carrier_native::scaffold::scaffold(&src_dir, name, lang, backend)
             .with_context(|| format!("Failed to scaffold native code in {}", src_dir.display()))?;
         for f in scaffolded {
             files.push(format!("{}/{}", name, f));
@@ -62,21 +62,6 @@ pub fn run(
             files.push(format!("{}/{}", name, f));
         }
     }
-    // if let Some(lang) = native {
-    //     let dir_name = carrier_native::scaffold::native_dir_name(lang);
-    //     let native_dir = src_dir.join(dir_name);
-    //
-    //     let init_r = carrier_native::scaffold::scaffold(&native_dir, lang, cpp_backend, name)
-    //         .with_context(|| format!("Failed to scaffold native code in {}", native_dir.display()))?;
-    // 
-    //     fs::write(src_dir.join("__init__.R"), init_r)
-    //         .context("Failed to write __init__.R")?;
-    // 
-    //     for stem in ["hello", "add"] {
-    //         files.push(format!("{}/{}/{}.{}", name, dir_name, stem, lang.src_extension()));
-    //     }
-    //     files.push(format!("{}/{}/Makevars", name, dir_name));
-    // }
     
     println!("Initialized module '{}' in '{}'", name, project_dir_name);
     for f in &files {

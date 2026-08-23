@@ -294,7 +294,6 @@ impl CarrierToml {
     pub fn default_template(name: &str, native: Option<(NativeLang, Option<Backend>)>) -> String {
         let native_block = match native {
             Some((lang, backend)) => {
-                let dir_name = carrier_native::scaffold::native_dir_name(lang);
                 let build_deps_line = match lang {
                     NativeLang::Cpp => match backend.unwrap_or_default() {
                         Backend::Rcpp => "build_deps = { Rcpp = \"*\" }".to_string(),
@@ -304,11 +303,11 @@ impl CarrierToml {
                 };
                 format!(
                     r#"[native]
-# Only needed if native code doesn't live in the default location
-# (src/ under this module's source dir), or if `src/Makevars`
-# references headers from another R package (e.g. Rcpp).
-path = "{dir_name}/"
-# path can also be an array: path = ["{dir_name}/", "extra/src"]
+# Native code is auto-detected under this module's source dir — no
+# path needed for the default src/ layout. Only set path if compiled
+# code lives somewhere else, or in more than one place.
+# path = "native/"
+# path can also be an array: path = ["native/", "extra/src"]
 {build_deps_line}
 # build_deps is resolved and installed before compiling.
 # Does not imply a runtime dependency; list in [package_deps]
