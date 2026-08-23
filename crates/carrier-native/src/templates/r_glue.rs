@@ -1,30 +1,44 @@
 pub const HOOK: &str = r#"#' @export
-dll = NULL
+dlls = NULL
 
 .on_load = function(ns) {
-    ns$dll = dyn.load(box::file(paste0(".lib/{{native_dir}}", .Platform$dynlib.ext)))
+    lib_dir = box::file(".lib")
+    files = list.files(lib_dir, pattern = paste0(.Platform$dynlib.ext, "$"), full.names = TRUE)
+    if (length(files) == 0) {
+        stop("No compiled artifact found in .lib/")
+    }
+    names(files) = tools::file_path_sans_ext(basename(files))
+    ns$dll_paths = files
+    ns$dlls = lapply(files, dyn.load)
 }
 
 .on_unload = function(ns) {
-    dyn.unload(box::file(paste0(".lib/{{native_dir}}", .Platform$dynlib.ext)))
+    for (path in ns$dll_paths) dyn.unload(path)
 }
 "#;
 
 pub const HOOK_RCPP: &str = r#"box::use(Rcpp[...])
 
 #' @export
-dll = NULL
+dlls = NULL
 
 .on_load = function(ns) {
-    ns$dll = dyn.load(box::file(paste0(".lib/{{native_dir}}", .Platform$dynlib.ext)))
+    lib_dir = box::file(".lib")
+    files = list.files(lib_dir, pattern = paste0(.Platform$dynlib.ext, "$"), full.names = TRUE)
+    if (length(files) == 0) {
+        stop("No compiled artifact found in .lib/")
+    }
+    names(files) = tools::file_path_sans_ext(basename(files))
+    ns$dll_paths = files
+    ns$dlls = lapply(files, dyn.load)
 }
 
 .on_unload = function(ns) {
-    dyn.unload(box::file(paste0(".lib/{{native_dir}}", .Platform$dynlib.ext)))
+    for (path in ns$dll_paths) dyn.unload(path)
 }
 "#;
 
-pub const HELLO: &str = r#"box::use(./hook[dll])
+pub const HELLO: &str = r#"box::use(./hook[dlls])
 
 #' Calling native code example 1: Hello World!
 #'
@@ -36,11 +50,11 @@ pub const HELLO: &str = r#"box::use(./hook[dll])
 #'
 #' @export
 hello_world = function(name) {
-    .Call(dll$hello_world, name)
+    .Call(dlls${{module_name}}$hello_world, name)
 }
 "#;
 
-pub const ADD: &str = r#"box::use(./hook[dll])
+pub const ADD: &str = r#"box::use(./hook[dlls])
 
 #' Calling native code example 2: Add function
 #'
@@ -53,7 +67,7 @@ pub const ADD: &str = r#"box::use(./hook[dll])
 #'
 #' @export
 add = function(x, y) {
-    .Call(dll$add, x, y)
+    .Call(dlls${{module_name}}$add, x, y)
 }
 "#;
 
