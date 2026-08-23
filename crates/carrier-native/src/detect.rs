@@ -1,7 +1,7 @@
 use std::path::Path;
 
 /// Whether `native_dir` has compiled code to build. A `Makevars` or
-/// `Makevars.win` file is enough on its own — that's still the
+/// `Makevars.win` file is enough on its own, that's still the
 /// deliberate signal for "this dir wants custom compile flags." But a
 /// directory with no Makevars still counts if it has actual
 /// `.c`/`.cpp`/`.cc`/`.cxx` sources: `R CMD SHLIB` compiles those fine
@@ -27,6 +27,7 @@ pub fn has_native_src(native_dir: &Path) -> bool {
             matches!(
                 e.path().extension().and_then(|ext| ext.to_str()),
                 Some("c") | Some("cpp") | Some("cc") | Some("cxx")
+                    | Some("f") | Some("f90") | Some("f95") | Some("f03")
             )
         })
 }
