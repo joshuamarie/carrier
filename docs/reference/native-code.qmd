@@ -2,11 +2,11 @@
 title: "Handling Native Code"
 ---
 
-Regular R packages have decades of established convention for compiled code: `src/`, `Makevars`, `useDynLib`, all built automatically as part of `R CMD INSTALL`. `{box}` has none of that built in. Its own vignette on compiled code says so directly: box doesn't have a built-in foreign function interface, and integrating compiled code means doing the [steps in that vignette](https://klmr.me/box/articles/compiled-code.html) by hand, compiling it yourself, loading it yourself, wiring `.Call()` yourself. `{carrier}` exists to automate that manual work, not to add polish to something box was already handling.
+Regular R packages have decades of established convention for compiled codes: through `src/`, `Makevars`, `useDynLib`, all built automatically as part of `R CMD INSTALL`. As what `{box}`'s own vignette on compiled code says so directly: `{box}` doesn't have a built-in foreign function interface, and integrating compiled code means doing the [steps in that vignette](https://klmr.me/box/articles/compiled-code.html) by hand, compiling it yourself, loading it yourself, wiring `.Call()` yourself. `{carrier}` exists to attempt to automate that manual work, not to add polish to something `{box}` was already handling.
 
-`{box}`-`{carrier}` modules can contain native code (C, C++, ...), compiled via `R CMD SHLIB`. The R-side loading, `dyn.load()`/`dyn.unload()` wired to a module's `.on_load`/`.on_unload` hooks, isn't automatic just because a native directory exists. The current solution `{carrier}` has comes from `hook.r`, which `carrier init --native` scaffolds once, at that moment. If you add native code to a module some other way, for example dropping a `Makevars` into an existing module without re-running `--native` init, nothing writes that loading glue for you. You're back to the manual steps the box vignette describes, for that module.
+`{box}`-`{carrier}` modules can contain native code (C, C++, ...), compiled via `R CMD SHLIB` mechanism. The R-side loading, `dyn.load()` / `dyn.unload()` wired to a module's `.on_load()` / `.on_unload()` hooks, isn't automatic just because a native directory exists. The current solution `{carrier}` has comes from the auto-generated `hook.r`, which `carrier init --native` scaffolds once, at that moment. If you add native code to a module some other way, for example dropping a `Makevars` into an existing module without re-running `--native` init, nothing writes that loading glue for you. You're back to the manual steps the `{box}` vignette describes, for that module.
 
-The practical difference from classic R packages is explicit: You are not forced to put native sources in a directory named `src/`. Any directory name is fine, as long as `{carrier}` can find it, either by automatic discovery or by an explicit `[native]` entry (see [The `[native]` block](#native-block)).
+The practical difference from classic R packages is rather explicit: You are not forced to put native sources in a directory named `src/`. Any directory name is fine, as long as `{carrier}` can find it, either by automatic discovery or by an explicit `[native]` entry (for more details, see [The `[native]` block](#native-block)).
 
 ## Enabling native code in a module
 
@@ -17,6 +17,8 @@ The practical difference from classic R packages is explicit: You are not forced
 2.  Either drop sources into a directory that carrier will discover automatically, or add a `[native]` block to `carrier.toml`. You do not need the `[native]` block at all if the sources live under a discoverable directory and you have no build-time R package dependencies.
 
 ## Supported languages and backends
+
+There are three (3) languages supported by `{carrier}` as of current version. The table below summarizes what `{carrier}` handles: 
 
 | Language | Value(s) accepted     | Status                   |
 |----------|-----------------------|--------------------------|
@@ -97,9 +99,9 @@ cppModule/
 └── ...
 ```
 
-### `hook.r`
+### Loading native compiled codes
 
-`hook.r` is written at the top level of the module's own source directory, next to `__init__.r`, not inside the native subdirectory. It loads (and unloads) the compiled shared object from `.lib/`, the directory a finished build's artifact is copied into, not the build cache (see [Build cache](#build-cache) below, that's a different location entirely). Here's what it looks like:
+If you start your project by running `carrier init <module-name> --native ...` command, this will generate one file: `hook.r`, which contains the example `.on_load()` / `.on_unload()` hooks which runs the following `dyn.load()` / `dyn.unload()` calls that load the compiled shared object. Once the command is executed, this file is written at the top level of the module's own source directory, next to `__init__.r`, not inside the native subdirectory. It loads (and unloads) the compiled shared object from `.lib/`, the directory a finished build's artifact is copied into, not the build cache (see [Build cache](#build-cache) below, that's a different location entirely). Here's what it looks like:
 
 `hook.r` (Rcpp backend):
 
@@ -118,9 +120,9 @@ dll = NULL
 }
 ```
 
-The pure-C / cpp11 variant is identical except that it omits the `box::use(Rcpp[...])` line. The placeholder `cpp` is the name of the native directory; `box::file()` resolves relative to the calling module, so the library is found next to the R files.
+The pure C / cpp11 variant is identical except that it omits the `box::use(Rcpp[...])` line. The `cpp/` is the name of the native directory and just a placeholder. `box::file()` resolves relative to the calling module, so the library is found next to the R files.
 
-If you run `carrier init <module-name>` without `--native`, it writes the pure R equivalent instead. Same `hello_world()`/`add()` logic, same file layout, but implemented directly in R: no `hook.r`, no `dyn.load()`. A fresh module always starts from runnable examples, compiled or not.
+If you run `carrier init <module-name>` without `--native`, then the generation tends to writes the pure R equivalent instead. The `hello_world()` / `add()` logic are pretty much the same as how they are implemented under the chosen "low-level" language, same file layout, but implemented directly in R, thus no file like `hook.r` which calls `dyn.load()` / `dyn.unload()` calls. A fresh module always starts from runnable examples, compiled or not.
 
 ### Binary bundles
 
