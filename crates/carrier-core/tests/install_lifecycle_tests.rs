@@ -17,6 +17,7 @@ fn unique_dir(label: &str) -> PathBuf {
 }
 
 struct Scratch(PathBuf);
+
 impl Scratch {
     /// Reserves a unique path without creating it. For dirs that the
     /// function under test (init::run, install::run) is expected to
@@ -24,6 +25,7 @@ impl Scratch {
     fn reserved(label: &str) -> Self {
         Self(unique_dir(label))
     }
+
     /// Reserves and creates the dir immediately, for scratch space the
     /// test itself needs to populate before calling into carrier-core.
     fn new(label: &str) -> Self {
@@ -31,10 +33,12 @@ impl Scratch {
         std::fs::create_dir_all(&dir).unwrap();
         Self(dir)
     }
+
     fn path(&self) -> &Path {
         &self.0
     }
 }
+
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
@@ -46,18 +50,20 @@ impl Drop for Scratch {
 struct CarrierLibGuard {
     previous: Option<String>,
 }
+
 impl CarrierLibGuard {
     fn set(path: &Path) -> Self {
         let previous = std::env::var("CARRIER_LIB").ok();
-        std::env::set_var("CARRIER_LIB", path);
+        unsafe { std::env::set_var("CARRIER_LIB", path); }
         Self { previous }
     }
 }
+
 impl Drop for CarrierLibGuard {
     fn drop(&mut self) {
         match &self.previous {
-            Some(v) => std::env::set_var("CARRIER_LIB", v),
-            None => std::env::remove_var("CARRIER_LIB"),
+            Some(v) => unsafe { std::env::set_var("CARRIER_LIB", v) },
+            None => unsafe { std::env::remove_var("CARRIER_LIB") },
         }
     }
 }
@@ -80,6 +86,7 @@ fn install_from_dir_then_remove_round_trip() {
 
     let module_dir = lib.path().join("roundtripmod");
     assert!(module_dir.join("__init__.r").is_file());
+
     let dist_info = lib.path().join("roundtripmod-0.1.0.dist-info");
     assert!(dist_info.join("manifest.json").is_file());
 
@@ -89,7 +96,8 @@ fn install_from_dir_then_remove_round_trip() {
 
     remove::run("roundtripmod", true).unwrap();
     assert!(!module_dir.exists());
-    // NOTE: ops::remove::run only removes the module directory — it does
+
+    // NOTE: ops::remove::run only removes the module directory, it does
     // not clean up the `<name>-<version>.dist-info` directory the way
     // install does before a reinstall. Asserting the *actual* behavior
     // here so a future change to remove.rs is caught either way; if this
@@ -116,6 +124,7 @@ fn reinstalling_replaces_the_previous_install() {
     assert!(module_dir.join("stale.R").exists());
 
     install::run(project.path().to_str().unwrap(), false, None).unwrap();
+
     assert!(!module_dir.join("stale.R").exists());
     assert!(module_dir.join("__init__.r").is_file());
 }
