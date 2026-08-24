@@ -399,10 +399,10 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
                 .with_context(|| format!("Failed to clear {}", lib_dir.display()))?;
         }
 
-        let artifact_name = crate::ops::compile::artifact_name(native_dir, name);
+        let binary_name = crate::ops::compile::binary_name(native_dir, name);
 
         println!("Building native code for '{}' ({})...", name, native_dir.display());
-        let outcome = carrier_native::build(target_dir, native_dir, artifact_name, name)
+        let outcome = carrier_native::build(target_dir, native_dir, binary_name, name)
             .with_context(|| format!("Failed to build native code for '{}' at {}", name, native_dir.display()))?;
         println!(
             "  built: {} ({})",
