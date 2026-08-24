@@ -2,7 +2,7 @@
 //! root as a fixture, instead of a synthetic one. This is the actual
 //! deliverable a user would bundle/install with `carrier`, so a passing
 //! suite here means the example in the repo genuinely still works with
-//! the current carrier-core code — not just a stand-in.
+//! the current carrier-core code, not just a stand-in.
 //!
 //! Values are read from convert-proj's real `carrier.toml` at test time
 //! (module name, version, ...) rather than hardcoded, so this doesn't
@@ -35,14 +35,17 @@ fn unique_dir(label: &str) -> PathBuf {
 }
 
 struct Scratch(PathBuf);
+
 impl Scratch {
     fn reserved(label: &str) -> Self {
         Self(unique_dir(label))
     }
+
     fn path(&self) -> &Path {
         &self.0
     }
 }
+
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
@@ -52,24 +55,26 @@ impl Drop for Scratch {
 struct CarrierLibGuard {
     previous: Option<String>,
 }
+
 impl CarrierLibGuard {
     fn set(path: &Path) -> Self {
         let previous = std::env::var("CARRIER_LIB").ok();
-        std::env::set_var("CARRIER_LIB", path);
+        unsafe { std::env::set_var("CARRIER_LIB", path); }
         Self { previous }
     }
 }
+
 impl Drop for CarrierLibGuard {
     fn drop(&mut self) {
         match &self.previous {
-            Some(v) => std::env::set_var("CARRIER_LIB", v),
-            None => std::env::remove_var("CARRIER_LIB"),
+            Some(v) => unsafe { std::env::set_var("CARRIER_LIB", v) },
+            None => unsafe { std::env::remove_var("CARRIER_LIB") },
         }
     }
 }
 
 /// Sanity check that the fixture is actually present before trusting any
-/// other test's results — if this fails, the other tests here are
+/// other test's results, if this fails, the other tests here are
 /// meaningless, not passing-by-accident.
 #[test]
 fn convert_proj_fixture_exists_with_carrier_toml() {
@@ -149,16 +154,18 @@ fn convert_proj_installs_via_carrier_install_run() {
     assert!(module_dir.join("mass").join("cross_system_mass.R").is_file());
     assert!(module_dir.join("mass").join("imperial_mass.R").is_file());
     assert!(module_dir.join("mass").join("specialty.R").is_file());
+
     assert!(module_dir.join("temp").join("__init__.R").is_file());
     assert!(module_dir.join("temp").join("conversions.R").is_file());
 
-    // carrier.toml and README.md are project files, not module files —
+    // carrier.toml and README.md are project files, not module files,
     // must not leak into the installed tree.
     assert!(!module_dir.join("carrier.toml").exists());
     assert!(!module_dir.join("README.md").exists());
 
     let dist_info = lib.path().join(format!("{}-{}.dist-info", toml.module.name, toml.module.version));
     assert!(dist_info.join("manifest.json").is_file());
+
     let manifest_json = std::fs::read_to_string(dist_info.join("manifest.json")).unwrap();
     let manifest = Manifest::from_json(&manifest_json).unwrap();
     assert_eq!(manifest.name, toml.module.name);
