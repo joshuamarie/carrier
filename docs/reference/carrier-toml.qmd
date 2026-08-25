@@ -2,7 +2,7 @@
 title: "carrier.toml"
 ---
 
-`carrier.toml` sits at the root of a module project, one level above the source directory. It may contain up to five tables:
+When we compose a (re)usable codes to be shared as a library, one must contain a file that declares the metadata, including the info of the authors, the required version, and package dependencies the library used. Composing a `{box}`-`{carrier}` module library requires one file: `carrier.toml`. This metadata file sits at the root of a module project, one level above the source directory. It may contain up to five tables:
 
 | Table | Required | Purpose |
 |--------------------|----------------------------|-------------------------|
@@ -13,6 +13,8 @@ title: "carrier.toml"
 | `[test]` | no | Test framework configuration (currently advisory only) |
 
 ## `[module]`
+
+This block is always required. As what the table below said, this contains the info of the author of `{box}`-`{carrier}` module library 
 
 | Field | Type | Required | Notes |
 |-----------------|-----------------|---------------------|-----------------|
@@ -25,13 +27,13 @@ title: "carrier.toml"
 | `src` | string | no | Path to the source directory, relative to the project root. Defaults to a directory named exactly `name`. The chosen directory **must** contain `__init__.r` or `__init__.R`. |
 
 ::: {.callout-note title="Technical Notes"}
--   `r_version` is recorded in the archive manifest but is **not** currently enforced against the R installation that runs `carrier install` / `carrier compile`.
--   Both `__init__.r` and `__init__.R` are accepted (case-insensitive entry-point detection). This matches `{box}`'s own behaviour.
+-   `r_version` is recorded in the archive manifest but is *not* currently enforced against the R installation that runs `carrier install` / `carrier compile`.
+-   Both `__init__.r` and `__init__.R` are accepted (case-insensitive entry-point detection). This matches `{box}`'s own behaviour. 
 :::
 
 ### Authors {#authors}
 
-Each entry is either a plain string or an inline table:
+The entry accepts either a single string, an array, a dictionary / hash table, or all of them in an array. Each entry is either a plain string or an inline table:
 
 ``` toml
 authors = [
@@ -39,6 +41,8 @@ authors = [
     { name = "Joshua Marie", email = "joshua.marie.k@gmail.com", url = "https://example.com", orcid = "0000-0000-0000-0000" },
 ]
 ```
+
+When a hash table is used, here are the entry fields to be declared: 
 
 | Field   | Required | Notes                               |
 |---------|----------|-------------------------------------|
@@ -49,8 +53,7 @@ authors = [
 
 ## `[package_deps]`
 
-Maps an R package name to a version requirement.\
-A value may be a bare string (CRAN, default mirror) or an inline table that also specifies a repository:
+If you write R packages before, this is just like `Imports` in R packages' `DESCRIPTION`. In this block, it maps an R package name to a version requirement. A value may be a bare string (CRAN, default mirror) or an inline table that also specifies a repository:
 
 ``` toml
 [package_deps]
@@ -59,9 +62,11 @@ ggplot2 = ">=3.4.0"
 fable = { version = "*", repo = "https://tidyverts.r-universe.dev/" }
 ```
 
-The default mirror is `https://cloud.r-project.org`.
+When it is just a single string, not a hash table, the `repo` refers to the default mirror which is `https://cloud.r-project.org`.
 
 ### Version-spec syntax
+
+The idea behind the declaration of the version takes from how `Cargo.toml` package dependencies version must be declared, and they are always in strings. The table below summarizes the syntax of the version declaration. 
 
 | Syntax              | Meaning                                  |
 |---------------------|------------------------------------------|
@@ -94,7 +99,7 @@ other_module = "*"   # will fail at resolution time
 ```
 
 ::: {.callout-note title="Technical Notes"}
-An entry without a `source` (whether written as a bare string or as an inline table that omits the field) produces an explicit resolution error. There is deliberately no silent fallback.
+As of current version, an entry without a `source` (whether written as a bare string or as an inline table that omits the field) produces an explicit resolution error. There is deliberately no silent fallback. It has to have the source to be declared, since there's no default registry for `{box}`-`{carrier}` modules, yet. 
 :::
 
 ## `[native]`
