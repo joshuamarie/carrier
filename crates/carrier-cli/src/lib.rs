@@ -90,10 +90,14 @@ enum Commands {
         /// Path to the project root (e.g. `.` or `./my-project`)
         path: String,
 
-        /// Ignore any existing carrier.lock and re-resolve everything
-        /// fresh instead of reusing its pins
-        #[arg(long)]
+        #[arg(long, conflicts_with = "remove", help = "Ignore any existing carrier.lock and re-resolve everything fresh instead of reusing its pins")]
         update: bool,
+
+        #[arg(long, conflicts_with = "remove", help = "Record the R version currently on PATH in carrier.lock, as provenance only, not enforced on install")]
+        with_rver: bool,
+
+        #[arg(long, help = "Delete carrier.lock instead of writing one. This is the safe version of removal, carrier just resolves fresh without it")]
+        remove: bool,
     },
 
     /// Remove an installed module
@@ -126,8 +130,8 @@ pub fn run() {
         Commands::Install { source, install_deps, repo } => {
             commands::install::run(InstallArgs { source, install_deps, repo })
         }
-        Commands::Lock { path, update } => {
-            commands::lock::run(LockArgs { path, update })
+        Commands::Lock { path, update, with_rver, remove } => {
+            commands::lock::run(LockArgs { path, update, with_rver, remove })
         }
         Commands::Remove { name, force } => {
             commands::remove::exec(RemoveArgs { name, force })
