@@ -8,15 +8,15 @@ comments: false
 
 `{carrier}` is a command-line package manager for [{box}](https://klmr.me/box/) modules, written in Rust. `{box}` package and `{carrier}` are mutually exclusive: `{box}` is an R package that gives R a proper module (reusability and composability of R codes) system, but `{carrier}` is a CLI tool that does the job that gives those modules [a way to be packaged, versioned, and distributed]{.underline}. The interface and usage is deliberately close to Python's `pip`.
 
-A `{box}` module distributed through `{carrier}` must carry one extra file at its root: `carrier.toml`. It is a metadata file that plays the same role `DESCRIPTION` plays for an R package or `pyproject.toml` plays for a Python package (name, version, license, authors, and both R package and `{box}` module dependencies). You can also lock the dependencies of the modules under `{carrier}` through a lockfile in the name of `carrier.lock` (see for more [details](./reference/carrier-lock)).
+To make `{box}` modules distributable or installable with `{carrier}`, one must carry one extra file at its root: `carrier.toml`. It is a metadata file that plays the same role `DESCRIPTION` plays for an R package or `pyproject.toml` plays for a Python package (name, version, license, authors, and both R package and `{box}` module dependencies). You can also optionally lock the dependencies of the modules under `{carrier}` through a lockfile in the name of `carrier.lock` (see for more [details](./reference/carrier-lock)).
 
-To see how `{carrier}` works as a starter, see the following guide under [Get Started](./getting-started) and/or the README under [{convert-proj}](https://github.com/joshuamarie/carrier/tree/main/convert-proj).
+There's no actual formal name to call these packaged `{box}` modules, so let's call it as [`{box}`-`{carrier}` modules]{.underline} for now. To see how `{carrier}` works as a starter, see the following guide under [Get Started](./getting-started) and/or the README under [{convert-proj}](https://github.com/joshuamarie/carrier/tree/main/convert-proj).
 
 ## Commands
 
 A following usage is `carrier <command> ...` on the command line. Here are the following primary `<command>` you can use:
 
--   `init` (Optional): scaffold a new module with the most important file: `carrier.toml`.
+-   `init` (Optional): scaffold a new module project together with the most important file: `carrier.toml`.
 -   `bundle`: package a module in a `.tar.gz` archive, with a `manifest.json` built from `carrier.toml`.
 -   `install`: install a bundled archive, a local module directory, or a module living in a repo (for instance, for GitHub repo: `gh:user/repo`), and optionally resolve its R package dependencies (it looks up from CRAN by default). It also checks the installed R against the module's declared `r_version` constraint before proceeding.
 -   `lock`: resolve a module's R package dependencies to exact versions and write `carrier.lock`, so a later install reuses those pins instead of re-resolving against CRAN. Also checks `r_version` and records the resolving R version in the lock.
@@ -24,6 +24,6 @@ A following usage is `carrier <command> ...` on the command line. Here are the f
 
 ## Disclaimer
 
-Take note that `{carrier}` is a CLI tool and it doesn't replace ANYTHING, and that includes traditional R packages. In fact, it serves like a "package manufacturer", responsible for managing `{box}` module packages involving packaging/bundling and installations, so it rather give more opportunity for `{box}` modules to be distributable. Once those packages are installed, you can attach them through `box::use()`, as this function automatically resolves it the same way it resolves any other module (see [details](installation.qmd) for the installation, as well as the patched `{box}` fork this currently requires).
+Take note that `{carrier}` is a CLI tool and it doesn't replace ANYTHING, and that includes traditional R packages (`{box}` modules can still depend on CRAN-style packages, after all). In fact, it is built for a primary purpose, that is to serve as a "package manufacturer", responsible for managing `{box}` module packages involving packaging/bundling and installations, so `{carrier}` rather gives more opportunity for `{box}` modules. Once `{box}`-`{carrier}` packages are installed, you can attach them through `box::use()`, as this function automatically resolves it the same way it resolves any other module (see [details](installation.qmd) for the installation, as well as the patched `{box}` fork this currently requires).
 
-Start with [Get Started](./getting-started) for a full walkthrough, or jump to the [CLI reference](./reference/cli) if you already know what you're doing.
+Begin with [Get Started](./getting-started) for a full walkthrough as starters, or jump to the [CLI reference](./reference/cli) if you already know what you're doing.
