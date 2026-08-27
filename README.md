@@ -127,7 +127,7 @@ There are patches along the source code of `{box}`. This way, the modules manage
 Try `{convert}` module, which belongs to `convert-proj` from this GitHub repo: 
 
 ```r
-# carrier install gh:joshuamarie/carrier/tree/main/convert-proj
+# carrier install gh:joshuamarie/carrier/tree/main/examples/modules/convert-proj
 box::use(cv = convert)
 cv$mass$mass_conversion_table(1000)
 ```
