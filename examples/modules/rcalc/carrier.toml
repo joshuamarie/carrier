@@ -1,0 +1,22 @@
+[module]
+name = "rcalc"
+version = "0.1.0"
+description = "This package is used for demo, containing functions involving calculus"
+authors = [
+    { name = "Joshua Marie", email = "joshua.marie.k@gmail.com" }
+]
+license = "Unknown"
+r_version = ">=4.1.0"
+src = "src/"
+ 
+# [package_deps]
+ 
+# [module_deps]
+
+[native]
+path = ["c/", "cpp/"]
+build_deps = { Rcpp = "*" }
+
+# [test]
+# framework = "testthat"
+# dir = "tests"

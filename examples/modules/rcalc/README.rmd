@@ -1,0 +1,33 @@
+---
+output: github_document
+---
+
+# Demo module: Calculus in R
+
+This is a demo `{box}`-`{carrier}` module that uses native compiled codes which contains functions involving calculus. 
+
+## Requirements
+
+-  `{carrier}` binary (see [installation](https://joshuamarie.com/carrier/installation.html) for details)
+-  Rtools toolchain 
+-  `{box}` R package (see [installation](https://joshuamarie.com/carrier/installation.html) for more details)
+
+## Installation
+
+``` bash
+carrier install gh:joshuamarie/carrier/tree/main/examples/modules/rcalc --install-deps
+```
+
+```{r}
+box::use(rcalc)
+```
+
+## Examples
+
+Here's an example that finds the root of a function using Brent's method:
+
+```{r}
+rcalc$brentq(\(x) x^2 - 4, 0, 5)
+```
+
+
