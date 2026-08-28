@@ -14,12 +14,12 @@ pak::pak("joshuamarie/box@feature/carrier-module-support")
 Then, install this package via following:
 
 ``` bash
-carrier install gh:joshuamarie/carrier/tree/main/convert-proj
+carrier install gh:joshuamarie/carrier/tree/main/examples/modules/convert-proj
 ```
 
 ## Usage
 
-This module IS an R package, not the traditional CRAN-style package, and it has to be attached through `box::use()` and has similar paradigm as Python's. 
+This module IS an R package, not on a traditional CRAN-style package system, and it has to be attached through `box::use()` and has similar paradigm as Python's. 
 
 It has several ways to import the `convert` module:
 

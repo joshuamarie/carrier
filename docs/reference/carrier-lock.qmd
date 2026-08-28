@@ -2,17 +2,27 @@
 title: "carrier.lock"
 ---
 
-`carrier.lock` is a lockfile (like `Cargo.lock` or `poetry.toml` from Python) pins the exact R package versions (and repos) that `carrier` resolved the last time you ran `carrier lock`. Commit it next to `carrier.toml` so later installs, either by you or by anyone else, will reuse those pins instead of re-resolving against CRAN.
+`carrier.lock` is a lockfile (like `Cargo.lock` or `poetry.lock` from Python) that pins the exact R package versions (and repos) that `carrier` resolved the last time you ran `carrier lock`. Commit it next to `carrier.toml` so later installs, either by you or by anyone else, will reuse those pins instead of re-resolving against CRAN.
 
 Only R packages, under `[package_deps]`, are locked on the current version of `carrier`. On the other hand, `{box}` module dependencies (`[module_deps]`) have no automatic resolve-and-install path as of now, so there is nothing concrete to pin for them.
 
 ## Format
 
-The file is TOML. Format version is currently `1`:
+The file is TOML. Format version is currently `1`. The table below summarizes the blocks and fields under `carrier.lock`:
+
+| Field | Meaning |
+|--------------------------------|----------------------------------------|
+| `version` | Lock *format* version (not a package version). Defaults to `1` if omitted when reading. |
+| `r_version` | The R version that produced this lock, e.g. `"4.2.0"`. This is totally optional, and it has rather no use. This is only written when `carrier lock` is run with `--with-rver`. The constraint actually enforced lives in `carrier.toml`'s `r_version` field, checked separately at lock and install time (see below). |
+| `[[package]]` | One entry per pinned R package. Entries are written sorted by `name` so the file stays stable and diffable. |
+| `name` | Package name as it appears on the repo. |
+| `version` | Exact semver string carrier resolved (e.g. `"1.2.2"`). |
+| `repo` | Repo URL used for that resolution (default CRAN mirror, or an explicit repo from `[package_deps]`). |
+
+Here's an example: 
 
 ``` toml
 version = 1
-r_version = "4.2.0"
 
 [[package]]
 name = "dplyr"
@@ -25,50 +35,71 @@ version = "1.2.0"
 repo = "https://cloud.r-project.org"
 ```
 
-| Field | Meaning |
-|--------------------------------|----------------------------------------|
-| `version` | Lock *format* version (not a package version). Defaults to `1` if omitted when reading. |
-| `r_version` | The R version that produced this lock, e.g. `"4.5.1"`. Optional — absent on locks written before this field existed. Provenance only; the constraint actually enforced lives in `carrier.toml`'s `r_version` field, checked separately at lock and install time (see below). |
-| `[[package]]` | One entry per pinned R package. Entries are written sorted by `name` so the file stays stable and diffable. |
-| `name` | Package name as it appears on the repo. |
-| `version` | Exact semver string carrier resolved (e.g. `"1.2.2"`). |
-| `repo` | Repo URL used for that resolution (default CRAN mirror, or an explicit repo from `[package_deps]`). |
+`r_version` isn't in the example above since it's not written by default as of v0.2.0. This field is totally optional and only generated when you pass `--with-rver` to `carrier lock` (see below). Here's what it looks like when you do:
+
+``` toml
+version = 1
+r_version = "4.2.0"
+
+[[package]]
+name = "dplyr"
+version = "1.1.3"
+repo = "https://cloud.r-project.org"
+```
 
 ## Writing the lock
 
-Run the following command and this will generate the certain lockfile that pins the dependencies:
+Generating the lockfile runs a simple command through `carrier lock <path/of/the/proj>`, just isn't the same process as `Cargo.lock` being generated through builds. Run the following command and this will generate the certain lockfile that pins the dependencies:
 
 ``` bash
 carrier lock .
 ```
 
-What happens is that `{carrier}` will read `carrier.toml`, then resolves `[package_deps]` (honoring any existing lock unless you pass `--update`), and writes `carrier.lock` next to `carrier.toml`.
-
-You are also allowed to re-resolve the pinned dependencies under the lockfile by passing `--update`. Here's an example:
+What happens is that `{carrier}` will read `carrier.toml`, then resolves `[package_deps]` (honoring any existing lock unless you pass `--update`), and writes `carrier.lock` next to `carrier.toml`. You are also allowed to re-resolve the pinned dependencies under the lockfile by passing `--update`. Here's an example:
 
 ``` bash
 carrier lock . --update
 ```
 
+
 `--update` discards the existing lock and re-resolves everything from scratch. Use it when you intentionally want newer upstream versions. A project with no `[package_deps]` resolves to an empty set: the lock is still there written, but with no `[[package]]` entries.
+
+### Recording the R version
+
+By default, the lock doesn't record which R wrote it. Let's say two people on different R versions running `carrier lock` against the same `carrier.toml` should get the exact same `[[package]]` output, and if `r_version` was always written that'd turn into a pointless diff every time. Pass `--with-rver` if you want it recorded anyway:
+
+``` bash
+carrier lock . --with-rver
+```
+
+It is added as part of proposal, and this can be mostly useful for debugging. Say someone reports a weird install and you want to know what R wrote their lock. It still doesn't change or dictate what's enforced at install, that's still `carrier.toml`'s `r_version` job.
+
+### Removing the lock
+
+You can manually delete `carrier.lock` whatever, whenever, and however you want. `{carrier}` just adds another option on `carrier lock` command through passing `--remove`, which deletes `carrier.lock` and stops there. Nothing will be resolved on `{carrier}` once `carrier.lock`, but nothing is broken, so rest assured. Also, `--update` / `--with-rver` are ignored if you pass them alongside `--remove`. There's a nuance and that is to *safely remove the lockfile*. To repeat, a missing lock just means `{carrier}` resolves `[package_deps]` under `carrier.toml` fresh, same as a project that never had one.
+
+``` bash
+carrier lock . --remove
+```
 
 ## How installs use the lock
 
-Nothing throws a failure when the module doesn't have a lockfile. `{carrier}` still conveniently resolves the usual way to install the package dependencies, although having a lockfile is nice-to-have for better reproducibility. The problem is that when you DO have a lockfile but malformed and/or unreadable will throw a failure — a lock the tool cannot trust is worse than no lock at all. 
+Almost nothing throws a failure when the module doesn't have a lockfile. When we say "almost", `{carrier}` still conveniently resolves the usual way to install the package dependencies, although having a lockfile is nice-to-have for better reproducibility. The problem is that when you DO have a lockfile but malformed and/or unreadable will throw a failure. That's why a broken lock file fails loudly instead of being silently ignored.
 
 When `carrier.lock` is present in the project root:
 
--   Any package listed in the lock is installed at that [**exact**]{.underline} version and repo.
--   Packages not in the lock (for example a dependency you just added to `carrier.toml`) are still resolved fresh.
+-   Any package listed in the lock is installed at that [exact version]{.underline} and repo.
+-   Packages not in the lock (for example a dependency you just added to `carrier.toml`) are still resolved freshly.
 
 ## R version
 
-`{carrier}` lockfile is still meticulous when pinning R version is the problem. The metadata file `carrier.toml`'s `module.r_version` is a version constraint (e.g. `">=4.4.0"`, `"^4.4.0"`, a range), just like how you write `package_deps` / `module_deps` version . Both `carrier lock` and `carrier install` detect the R currently on `PATH` and check it against that constraint before doing anything else. A version that doesn't satisfy it throws an error, a hard error, not a warning.
+`{carrier}` still cares about the R version, just not through the lock. `carrier.toml`'s `module.r_version` is a version constraint, like `">=4.4.0"` or `"^4.4.0"`, written the same way you'd write a `package_deps`/`module_deps` version. Both `carrier lock` and `carrier install` check the R on `PATH` against this constraint before doing anything else, and if it doesn't match, that's a hard error, not a warning.
 
-This is separate from `carrier.lock`'s `r_version` field. The lock's field only records *what R produced this lock*. The thing actually enforced on every run is always `carrier.toml`'s declared floor, checked against whatever R is installed right now. Write `r_version` as a floor (`">=4.4.0"`), not an exact pin. When we say "exact pin", this means only people on that exact R version can install the module at all.
+`carrier.lock`'s `r_version` field is different. It just records what R wrote the lock, rather than some constraints, and only if you passed `--with-rver`. What's actually enforced is always `carrier.toml`'s floor, checked against whatever R you have right now. What you need to do is to write it as a floor like `">=4.4.0"`, not an exact pin. An exact pin means only people on that one exact R version can even install the module.
 
 ## Design notes
 
 1.  Packages are sorted by name on write so routine re-locks do not produce noisy diffs when the resolved graph is unchanged.
 2.  An invalid version string inside a lock entry fails hard on lookup rather than falling through to a fresh resolve.
 3.  The lock format version field exists so future schema changes can be detected and handled without silently misreading old locks.
+4.  `r_version` is opt-in (`--with-rver`) rather than always written, for the same diff-stability reason as (1): it depends on the machine running `carrier lock`, not on `carrier.toml`, so recording it unconditionally would defeat (1) for any two contributors on different R installs.

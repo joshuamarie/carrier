@@ -1,0 +1,2 @@
+PKG_CXXFLAGS = $(shell "${R_HOME}/bin/Rscript" -e "cat(Rcpp:::CxxFlags())")
+PKG_LIBS = $(shell "${R_HOME}/bin/Rscript" -e "cat(Rcpp:::LdFlags())")

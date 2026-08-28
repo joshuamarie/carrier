@@ -25,7 +25,7 @@ static ENV_LOCK: Mutex<()> = Mutex::new(());
 /// current working directory, so `cargo test` works the same no matter
 /// where it's invoked from.
 fn convert_proj_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../convert-proj")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/modules/convert-proj")
 }
 
 fn unique_dir(label: &str) -> PathBuf {

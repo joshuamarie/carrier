@@ -1,0 +1,8 @@
+.Rhistory
+.RData
+.Renviron
+.Rprofile
+
+*.o
+*.so
+*.dll

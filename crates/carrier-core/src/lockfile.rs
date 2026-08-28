@@ -95,10 +95,17 @@ pub fn read(project_root: &Path) -> Result<Option<CarrierLock>> {
 /// sorted by package name for a stable, diffable file — an unsorted lock
 /// would produce noisy diffs on every write even when nothing about the
 /// resolved graph actually changed.
+///
+/// `r_version` is `None` by default (see `--with-r-version` on
+/// `carrier lock`): the field is provenance-only, never enforced (the
+/// real constraint is `carrier.toml`'s `module.r_version`, checked
+/// separately), and two contributors on different R installs writing
+/// otherwise-identical locks would produce a spurious diff if this were
+/// recorded unconditionally.
 pub fn write(
     project_root: &Path,
     resolved: &BTreeMap<String, (Version, String)>,
-    r_version: &str,
+    r_version: Option<&str>,
 ) -> Result<()> {
     let mut packages: Vec<LockedPackage> = resolved
         .iter()
@@ -112,7 +119,7 @@ pub fn write(
 
     let lock = CarrierLock {
         version: LOCK_FORMAT_VERSION,
-        r_version: Some(r_version.to_owned()),
+        r_version: r_version.map(str::to_owned),
         packages,
     };
     let contents = toml::to_string_pretty(&lock).context("Failed to serialize carrier.lock")?;
