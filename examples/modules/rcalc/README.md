@@ -20,21 +20,53 @@ codes which contains functions involving calculus.
 carrier install gh:joshuamarie/carrier/tree/main/examples/modules/rcalc --install-deps
 ```
 
-``` r
-box::use(rcalc)
-```
+## Usage
 
-## Examples
-
-Here’s an example that finds the root of a function using Brent’s
-method:
+To load the module, use `box::use()`, then you can load the module in
+few (to several) ways:
 
 ``` r
-rcalc$brentq(\(x) x^2 - 4, 0, 5)
+box::use(
+    rcalc, 
+    rcalc/spline,            # or rcalc[spline]
+    rcalc[quad, brentq],  
+)
 ```
 
-    ## $root
-    ## [1] 2
-    ## 
-    ## $converged
-    ## [1] TRUE
+1.  First example: Find the root of the function $x^2 - 4$ using Brent’s
+    method:
+
+    ``` r
+    rcalc$brentq(\(x) x^2 - 4, 0, 5)
+    ```
+
+        ## $root
+        ## [1] 2
+        ## 
+        ## $converged
+        ## [1] TRUE
+
+    Also since you qualify `brentq()`, you can directly use the
+    function:
+
+    ``` r
+    brentq(\(x) x^2 - 4, 0, 5)
+    ```
+
+        ## $root
+        ## [1] 2
+        ## 
+        ## $converged
+        ## [1] TRUE
+
+2.  Find the integral of $f(x) = x^2$ from 0 to 5
+
+    ``` r
+    rcalc$quad(\(x) x^2, 0, 5)
+    ```
+
+        ## $value
+        ## [1] 41.66667
+        ## 
+        ## $evaluations
+        ## [1] 5

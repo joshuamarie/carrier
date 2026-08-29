@@ -7,11 +7,11 @@
 
 A module manager for [{box}](https://klmr.me/box/) modules.
 
-`{carrier}` is another package manager for R, built in Rust, exclusive for `{box}` modules. The tasks it handles involve bundling and installation. The entire purpose of `{carrier}` is to make the packaging for `{box}` modules possible and to be easily distributed. The interface of `carrier` is similar to that Python's `pip`.
+`{carrier}` is another package manager for R, built in Rust, exclusive for `{box}` modules — those packages are called `{box}`-`{carrier}` modules (or packages) for now. The tasks it handles involve bundling and installation. The entire purpose of `{carrier}` is to make the packaging for `{box}` modules possible and to be easily distributed. The interface of `{carrier}` is similar to that Python's `pip` or `conda`.
 
 ## Installation
 
-`{carrier}` is a command line interface (CLI) tool built in Rust. Pre-built binaries for Linux, macOS, and Windows is available on the [Releases](https://github.com/joshuamarie/carrier/releases).
+`{carrier}` is a Rust package with thin wrapper command line interface (CLI) tool built in Rust. Pre-built binaries for Linux, macOS, and Windows is available on the [Releases](https://github.com/joshuamarie/carrier/releases).
 
 You can install `carrier` using the Shell installers. 
 
@@ -43,7 +43,7 @@ To install the development version of `{carrier}` from GitHub, one requires [Rus
 cargo install --git https://github.com/joshuamarie/carrier
 ```
 
-Then install the particular main `{box}` package to load the modules managed by `{carrier}`. In a meantime, kindly install the package from the forked repo, as the patches for `{carrier}` support are written down there and hasn't made in its upstream yet, so do the following:
+Then install the particular primary `{box}` R package to load the `{box}`-`{carrier}` modules. In a meantime, kindly install the package from the forked repo, as the patches for `{carrier}` support are written down there and hasn't made in its upstream yet, so do the following:
 
 ``` r
 # Install the package through GitHub
@@ -54,7 +54,7 @@ pak::pak("joshuamarie/box@feature/carrier-module-support")
 
 ## Requirements
 
-The idea for distributable `{box}` modules is simple, really, you just need few requirements. Similar to Python packages, the usual structure of `{box}` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.r` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from traditional CRAN-style packages.  
+The idea for distributable `{box}` modules is simple, really — you just need few requirements. Similar to Python and R packages, the usual structure of `{box}`-`{carrier}` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.r` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from traditional CRAN-style packages.  
 
 Here's an example structure of the module: 
 
@@ -62,7 +62,7 @@ Here's an example structure of the module:
 <some-dir-name>/
 ├── carrier.toml   
 ├── README.md
-└── <module-name>/
+└── <src-folder>/
     ├── __init__.r
     ├── mod.r
     ├── mod2.r
@@ -76,7 +76,7 @@ And the structure can go deeper than this. If you know the structure of Python p
 
 ## CLI Usage: How it works
 
-`{carrier}` has few commands to manage the modules. 
+`{carrier}` has few commands that you need to know as a starter to manage the modules. 
 
 *Note: `<name-of-the-module>` is a placeholder. Apply a valid name.*
 
@@ -106,7 +106,7 @@ And the structure can go deeper than this. If you know the structure of Python p
     <!-- carrier install <name-of-the-module>.rmbx --global -->
     <!-- ``` -->
 
-    Note: Running `carrier install <module>`, where `<module>` is just a bare name, no prefixes or whatsoever, is valid but reserved for installation of packages from a remote repository. `{carrier}` is still at its early stage, and I would like to hear words from you, feedback is very welcome. 
+    *Note: Running `carrier install <module>`, where `<module>` is just a bare name, no prefixes or whatsoever, is valid but reserved for installation of packages from a registry or a remote repository. `{carrier}` is still at its early stage, and I would like to hear words from you, feedback is very welcome.*
 
 4.  Remove the installed module
 
@@ -122,11 +122,11 @@ And the structure can go deeper than this. If you know the structure of Python p
 
 ## Using installed modules
 
-There are patches along the source code of `{box}`. This way, the modules managed by `{carrier}` syncs with `{box}` R package (this includes the syntax). The `box::use()` automatically resolves the path where the `{carrier}`-installed modules belong.
+There are patches along the source code of `{box}`. This way, the modules managed by `{carrier}` syncs with `{box}` R package (this inherits the whole semantics, including the syntax). The `box::use()` call automatically resolves the path where the `{carrier}`-installed modules belong.
 
-Try `{convert}` module, which belongs to `convert-proj` from this GitHub repo: 
+Try `{convert}` module, which belongs to `convert-proj` from the `examples/`: 
 
-```r
+``` r
 # carrier install gh:joshuamarie/carrier/tree/main/examples/modules/convert-proj
 box::use(cv = convert)
 cv$mass$mass_conversion_table(1000)
