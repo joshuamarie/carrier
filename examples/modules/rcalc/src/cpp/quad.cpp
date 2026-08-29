@@ -4,6 +4,8 @@
 
 using Rcpp::Function;
 using Rcpp::as; 
+using Rcpp::List; 
+using Rcpp::Named; 
 
 static double eval_f(Function f, double x, int &count) {
     count++;
@@ -59,16 +61,22 @@ extern "C" SEXP cpp_quad(SEXP f_, SEXP lower_, SEXP upper_, SEXP tol_, SEXP max_
 
         double value = adaptive_simpson(f, lower, upper, fa, fm, fb, whole, tol, 0, count, max_depth);
 
-        SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
-        SET_VECTOR_ELT(out, 0, Rf_ScalarReal(value));
-        SET_VECTOR_ELT(out, 1, Rf_ScalarInteger(count));
+        // SEXP out = PROTECT(Rf_allocVector(VECSXP, 2));
+        // SET_VECTOR_ELT(out, 0, Rf_ScalarReal(value));
+        // SET_VECTOR_ELT(out, 1, Rf_ScalarInteger(count));
 
-        SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
-        SET_STRING_ELT(names, 0, Rf_mkChar("value"));
-        SET_STRING_ELT(names, 1, Rf_mkChar("evaluations"));
-        Rf_setAttrib(out, R_NamesSymbol, names);
+        // SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
+        // SET_STRING_ELT(names, 0, Rf_mkChar("value"));
+        // SET_STRING_ELT(names, 1, Rf_mkChar("evaluations"));
+        // Rf_setAttrib(out, R_NamesSymbol, names);
 
-        UNPROTECT(2);
+        // UNPROTECT(2);
+
+        List out = List::create(
+            Named("value") = value, 
+            Named("evaluations") = count
+        ); 
+
         return out;
     } catch (std::exception &e) {
         Rf_error("%s", e.what());
