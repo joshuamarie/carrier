@@ -7,7 +7,12 @@
 
 A module manager for [{box}](https://klmr.me/box/) modules.
 
-`{carrier}` is another package manager for R, built in Rust, exclusive for `{box}` modules — those packages are called `{box}`-`{carrier}` modules (or packages) for now. The tasks it handles involve bundling and installation. The entire purpose of `{carrier}` is to make the packaging for `{box}` modules possible and to be easily distributed. The interface of `{carrier}` is similar to that Python's `pip` or `conda`.
+`{carrier}` is another package manager for R, built in Rust, exclusive for `{box}` modules — those packages are called `{box}`-`{carrier}` modules (or packages) for now. The tasks it handles involve bundling and installation. The entire purpose of `{carrier}` is to make the packaging for `{box}` modules possible and to be easily distributed. The interface of `{carrier}` is similar to that Python's `pip` or `conda`. Visit the following docs:
+
+-  [The official docs](https://klmr.me/box/)
+-  [The book](https://modules-in-r.joshuamarie.com/)
+
+To get an explanation of how `{box}` modules work. 
 
 ## Installation
 
@@ -48,6 +53,7 @@ Then install the particular primary `{box}` R package to load the `{box}`-`{carr
 ``` r
 # Install the package through GitHub
 # This needs compilation BTW
+# To build the package
 # install.packages('pak')
 pak::pak("joshuamarie/box@feature/carrier-module-support")
 ```
