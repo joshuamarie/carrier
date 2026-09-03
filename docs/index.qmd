@@ -6,7 +6,7 @@ comments: false
 
 ## Why carrier (an overview)
 
-`{carrier}` is a command-line package manager for [{box}](https://klmr.me/box/) modules, written in Rust. `{box}` package and `{carrier}` are mutually exclusive: `{box}` is an R package that gives R a proper module (reusability and composability of R codes) system, but `{carrier}` is a CLI tool that does the job that gives those modules [a way to be packaged, versioned, and distributed]{.underline}. The interface and usage is deliberately close to Python's `pip`.
+`{carrier}` is a package manager with thin-wrapper command line interface (CLI) for [{box}](https://klmr.me/box/) modules, written in Rust. `{box}` package and `{carrier}` are mutually exclusive: `{box}` is an R package that gives R a proper module (reusability and composability of R codes) system, but `{carrier}` is a CLI tool that does the job that gives those modules [a way to be packaged, versioned, and distributed]{.underline}. The interface and usage is deliberately close to Python's `pip`.
 
 To make `{box}` modules distributable or installable with `{carrier}`, one must carry one extra file at its root: `carrier.toml`. It is a metadata file that plays the same role `DESCRIPTION` plays for an R package or `pyproject.toml` plays for a Python package (name, version, license, authors, and both R package and `{box}` module dependencies). You can also optionally lock the dependencies of the modules under `{carrier}` through a lockfile in the name of `carrier.lock` (see for more [details](./reference/carrier-lock)). Read the following documentations first: 
 
