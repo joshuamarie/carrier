@@ -170,9 +170,8 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&Carrie
     // project. A standalone .tar.gz has no project directory to read
     // one from, fall back to whatever `carrier bundle` baked into the
     // archive's manifest.json at bundle time.
-    let embedded_lock = tar::read_manifest(tar_path)?
-        .locked_packages
-        .map(CarrierLock::from_packages);
+    let embedded_manifest = tar::read_manifest(tar_path)?;
+    let embedded_lock = embedded_manifest.locked_packages.clone().map(CarrierLock::from_packages);
     let effective_lock = lock.cloned().or(embedded_lock);
 
     let plan = match &effective_lock {
@@ -183,7 +182,11 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&Carrie
     resolve::print_plan(&plan);
     resolve::execute_plan(&plan, !install_deps, effective_lock.as_ref())?;
 
-    build_native_if_present(&module_path, &name, install_deps)?;
+    let declared_dirs = embedded_manifest.native
+        .as_ref()
+        .map(|n| n.declared_dirs.clone())
+        .unwrap_or_default();
+    build_native_if_present(&module_path, &name, install_deps, &declared_dirs)?;
 
     Ok(())
 }
@@ -365,8 +368,13 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
 /// source, so a rebuild for another platform/R version is still
 /// possible from there; only the flat installed tree is pruned.
 ///
-/// Detection is purely filesystem-based (`has_native_src` via
-/// `find_native_dirs`), not keyed off the manifest's `native` field.
+/// Prefers `declared_dirs` from the archive's manifest — exactly what
+/// `resolve_native_dirs()` saw at bundle time, including a respected
+/// `[native].path` override — over a filesystem scan. Falls back to
+/// `find_native_dirs` only when `declared_dirs` is empty: an archive
+/// bundled before this field existed, or one with no native code at
+/// all. A fresh bundle always carries `declared_dirs` when it has
+/// native code, so the scan path is effectively legacy-only now.
 ///
 /// Gated behind `install_deps`: a module's `[native].build_deps`
 /// (e.g. Rcpp) need to already be installed before `R CMD SHLIB` can
@@ -376,8 +384,12 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
 /// Known gap: `[native].build_deps` aren't folded into package
 /// resolution anywhere yet. A build dep only actually gets installed
 /// today if it's ALSO listed under `[package_deps]` by convention.
-fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool) -> Result<()> {
-    let native_dirs = carrier_native::detect::find_native_dirs(module_path);
+fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool, declared_dirs: &[String]) -> Result<()> {
+    let native_dirs: Vec<PathBuf> = if declared_dirs.is_empty() {
+        carrier_native::detect::find_native_dirs(module_path)
+    } else {
+        declared_dirs.iter().map(|d| module_path.join(d)).collect()
+    };
     if native_dirs.is_empty() {
         return Ok(());
     }

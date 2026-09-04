@@ -140,39 +140,53 @@ fn build_manifest(
         toml.test.clone(),
     );
 
-    if let Some(artifacts) = built {
-        let build_deps = toml.native.as_ref()
-            .and_then(|n| n.build_deps.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(name, dep)| crate::manifest::PackageDepEntry {
-                name,
-                version: dep.version().to_owned(),
-                repo: if dep.repo() == DEFAULT_CRAN_MIRROR { None } else { Some(dep.repo().to_owned()) },
-            })
+    let native_dirs = toml.resolve_native_dirs(project_root).unwrap_or_default();
+
+    if !native_dirs.is_empty() || built.is_some() {
+        let declared_dirs = native_dirs.iter()
+            .filter_map(|d| d.strip_prefix(src_path).ok())
+            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
             .collect();
 
-        // One archive can have multiple native dirs; use the first
-        // build's source_hash as the manifest-level informational
-        // hash, same as a single-native-dir module always would.
-        let source_hash = artifacts.first()
-            .map(|a| a.source_hash.clone())
-            .unwrap_or_default();
+        let (build_deps, source_hash, native_artifacts) = if let Some(artifacts) = built {
+            let build_deps = toml.native.as_ref()
+                .and_then(|n| n.build_deps.clone())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(name, dep)| crate::manifest::PackageDepEntry {
+                    name,
+                    version: dep.version().to_owned(),
+                    repo: if dep.repo() == DEFAULT_CRAN_MIRROR { None } else { Some(dep.repo().to_owned()) },
+                })
+                .collect();
 
-        let native_artifacts = artifacts.iter().map(|a| {
-            let rel = a.artifact_path.strip_prefix(src_path).unwrap_or(&a.artifact_path);
-            crate::manifest::NativeArtifact {
-                target_triple: a.target_triple.clone(),
-                r_version: a.r_version.clone(),
-                source_hash: a.source_hash.clone(),
-                artifact: rel.to_string_lossy().replace('\\', "/"),
-            }
-        }).collect();
+            // One archive can have multiple native dirs; use the first
+            // build's source_hash as the manifest-level informational
+            // hash, same as a single-native-dir module always would.
+            let source_hash = artifacts.first()
+                .map(|a| a.source_hash.clone())
+                .unwrap_or_default();
+
+            let native_artifacts = artifacts.iter().map(|a| {
+                let rel = a.artifact_path.strip_prefix(src_path).unwrap_or(&a.artifact_path);
+                crate::manifest::NativeArtifact {
+                    target_triple: a.target_triple.clone(),
+                    r_version: a.r_version.clone(),
+                    source_hash: a.source_hash.clone(),
+                    artifact: rel.to_string_lossy().replace('\\', "/"),
+                }
+            }).collect();
+
+            (build_deps, source_hash, native_artifacts)
+        } else {
+            (Vec::new(), String::new(), Vec::new())
+        };
 
         manifest = manifest.with_native(crate::manifest::NativeManifest {
             build_deps,
             source_hash,
             artifacts: native_artifacts,
+            declared_dirs,
         });
     }
 

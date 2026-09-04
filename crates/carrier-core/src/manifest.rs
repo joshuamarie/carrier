@@ -106,6 +106,15 @@ pub struct NativeManifest {
     /// manifest.json from before this field existed still parses.
     #[serde(default)]
     pub artifacts: Vec<NativeArtifact>,
+    /// Every native-code directory `resolve_native_dirs()` found at
+    /// bundle time, relative to the module's source dir. Lets
+    /// `carrier install` use exactly what `carrier bundle` saw —
+    /// including an explicit `[native].path` override — instead of
+    /// re-scanning the unpacked tree and potentially finding a
+    /// different set. `#[serde(default)]` so a manifest.json from
+    /// before this field existed still parses (falls back to a scan).
+    #[serde(default)]
+    pub declared_dirs: Vec<String>,
 }
 
 impl Manifest {
