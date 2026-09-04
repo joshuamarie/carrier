@@ -3,9 +3,16 @@ dlls = NULL
 
 .on_load = function(ns) {
     lib_dir = box::file(".lib")
+    abi = file.path(lib_dir, ".abi")
+    if (file.exists(abi)) {
+        built = readLines(abi, warn = FALSE)
+        r_version = paste(R.version$major, strsplit(R.version$minor, ".", fixed = TRUE)[[1]][1], sep = ".")
+        if (built[1] != R.version$platform) stop("Compiled shared binary is for a different platform, rebuild with `carrier compile`")
+        if (built[2] != r_version) stop("Compiled shared binary is for a different R version, rebuild with `carrier compile`")
+    }
     files = list.files(lib_dir, pattern = paste0(.Platform$dynlib.ext, "$"), full.names = TRUE)
     if (length(files) == 0) {
-        stop("No compiled artifact found in .lib/")
+        stop("No compiled shared binary found in .lib/")
     }
     names(files) = tools::file_path_sans_ext(basename(files))
     ns$dll_paths = files
@@ -24,9 +31,16 @@ dlls = NULL
 
 .on_load = function(ns) {
     lib_dir = box::file(".lib")
+    abi = file.path(lib_dir, ".abi")
+    if (file.exists(abi)) {
+        built = readLines(abi, warn = FALSE)
+        r_version = paste(R.version$major, strsplit(R.version$minor, ".", fixed = TRUE)[[1]][1], sep = ".")
+        if (built[1] != R.version$platform) stop("Compiled shared binary is for a different platform, rebuild with `carrier compile`")
+        if (built[2] != r_version) stop("Compiled shared binary is for a different R version, rebuild with `carrier compile`")
+    }
     files = list.files(lib_dir, pattern = paste0(.Platform$dynlib.ext, "$"), full.names = TRUE)
     if (length(files) == 0) {
-        stop("No compiled artifact found in .lib/")
+        stop("No compiled shared binary found in .lib/")
     }
     names(files) = tools::file_path_sans_ext(basename(files))
     ns$dll_paths = files

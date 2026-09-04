@@ -26,6 +26,35 @@ pub struct BuildOutcome {
     pub from_cache: bool,
 }
 
+/// Path of the ABI sidecar for a compiled artifact — same directory,
+/// same filename, with `.abi.json` appended. Its own function so a
+/// caller checking compatibility before `dyn.load()` (R-side glue
+/// code, not carrier itself) can compute the same path independently
+/// without needing a `BuildOutcome` in hand.
+pub fn sidecar_path(artifact_path: &Path) -> PathBuf {
+    let mut name = artifact_path.file_name().unwrap_or_default().to_os_string();
+    name.push(".abi.json");
+    artifact_path.with_file_name(name)
+}
+
+/// Records what platform/R version an artifact was built for, next to
+/// the artifact itself. Without this, a cached or shipped binary
+/// loaded into a session with a different R version or platform fails
+/// however the dynamic linker feels like failing, typically a
+/// segfault, instead of a clean error. Written on every successful
+/// build, including a cache hit, since a cache hit can still be the
+/// first time this particular artifact lands in this particular
+/// `.lib/`.
+fn write_abi_sidecar(artifact_path: &Path, target_triple: &str, r_version: &str, source_hash: &str) -> Result<()> {
+    let path = sidecar_path(artifact_path);
+    let json = format!(
+        "{{\n  \"target_triple\": {:?},\n  \"r_version\": {:?},\n  \"source_hash\": {:?}\n}}\n",
+        target_triple, r_version, source_hash
+    );
+    std::fs::write(&path, json)
+        .with_context(|| format!("Failed to write ABI sidecar {}", path.display()))
+}
+
 /// Compile the sources under `native_dir` via `R CMD SHLIB`, mirroring
 /// the same conventions worked out by hand earlier:
 ///   - output named `<module_name><dynlib_ext>` (not derived from the
@@ -93,6 +122,7 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str, cache_key_
                 artifact_path.display()
             )
         })?;
+        write_abi_sidecar(&artifact_path, &target_triple, &r_version, &hash)?;
         return Ok(BuildOutcome {
             artifact_path,
             source_hash: hash,
@@ -157,6 +187,8 @@ pub fn build(module_dir: &Path, native_dir: &Path, module_name: &str, cache_key_
     std::fs::copy(&artifact_path, &cached_path).with_context(|| {
         format!("Failed to populate build cache at {}", cached_path.display())
     })?;
+
+    write_abi_sidecar(&artifact_path, &target_triple, &r_version, &hash)?;
 
     Ok(BuildOutcome {
         artifact_path,
