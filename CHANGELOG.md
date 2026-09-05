@@ -2,6 +2,8 @@
 
 # Development version
 
+# v0.2.0
+
 ## What's new
 
 -   Compiled code support: a module can now declare `[native]` in `carrier.toml` to ship C, C++, Rcpp, Rust, or Fortran code alongside its R source.
