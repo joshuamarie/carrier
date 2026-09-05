@@ -1,7 +1,7 @@
 use std::path::Path;
 
 /// Whether `native_dir` has compiled code to build. A `Makevars` or
-/// `Makevars.win` file is enough on its own — that's still the
+/// `Makevars.win` file is enough on its own, that's still the
 /// deliberate signal for "this dir wants custom compile flags." But a
 /// directory with no Makevars still counts if it has actual
 /// `.c`/`.cpp`/`.cc`/`.cxx` sources: `R CMD SHLIB` compiles those fine
@@ -27,26 +27,49 @@ pub fn has_native_src(native_dir: &Path) -> bool {
             matches!(
                 e.path().extension().and_then(|ext| ext.to_str()),
                 Some("c") | Some("cpp") | Some("cc") | Some("cxx")
+                    | Some("f") | Some("f90") | Some("f95") | Some("f03")
             )
         })
 }
 
 /// Every directory under `root` that itself qualifies via
-/// `has_native_src`. New patches involving compiled code no longer has 
-/// to live in one blessed location. Any nested directory with its own
-/// Makevars or native sources is its own independent compilation unit.
-/// `target/` is skipped so a Rust-mixed module's `cargo build` output
-/// is never mistaken for a second native dir. Sorted for deterministic
-/// build order.
+/// `has_native_src`. New patches involving compiled code no longer has
+/// to live in one blessed location. A nested directory with its own
+/// Makevars or native sources is its own independent compilation unit
+/// — but only when it isn't already inside one: once a directory
+/// qualifies, its own subdirectories are part of that same
+/// compilation unit (`R CMD SHLIB` recurses into them on its own) and
+/// are never inspected as candidates in their own right. `target/` is
+/// skipped so a Rust-mixed module's `cargo build` output is never
+/// mistaken for a native dir. `WalkDir` visits a directory before its
+/// children, so `skip_current_dir` is enough to prune both cases.
+/// Sorted for deterministic build order.
 pub fn find_native_dirs(root: &Path) -> Vec<std::path::PathBuf> {
-    let mut dirs: Vec<std::path::PathBuf> = walkdir::WalkDir::new(root)
-        .into_iter()
-        .filter_entry(|e| e.file_name().to_str() != Some("target"))
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_dir())
-        .map(|e| e.path().to_owned())
-        .filter(|d| has_native_src(d))
-        .collect();
+    let mut dirs = Vec::new();
+    let mut walker = walkdir::WalkDir::new(root).into_iter();
+
+    loop {
+        let entry = match walker.next() {
+            Some(Ok(e)) => e,
+            Some(Err(_)) => continue,
+            None => break,
+        };
+
+        if entry.file_name().to_str() == Some("target") {
+            walker.skip_current_dir();
+            continue;
+        }
+
+        if !entry.file_type().is_dir() {
+            continue;
+        }
+
+        if has_native_src(entry.path()) {
+            dirs.push(entry.path().to_owned());
+            walker.skip_current_dir();
+        }
+    }
+
     dirs.sort();
     dirs
 }

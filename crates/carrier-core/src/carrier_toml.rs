@@ -150,7 +150,7 @@ impl NativePath {
 /// to find via `system.file()` before `R CMD SHLIB` can run.
 ///
 /// `path` is relative to the module's own source directory (whatever
-/// `resolve_src_dir()` resolves to) — the same base `src` in
+/// `resolve_src_dir()` resolves to), the same base `src` in
 /// `[module]` already uses, not the project root `carrier.toml` lives
 /// in. `path = ["cpp", "extra/src"]` in a module's own `carrier.toml`
 /// means exactly what it looks like: two dirs nested under that
@@ -166,7 +166,7 @@ pub struct NativeConfig {
 }
 
 /// `box` accepts either case for a module's `.r`/`.R` extension, so
-/// carrier's own entry-point check shouldn't hardcode one — a module
+/// carrier's own entry-point check shouldn't hardcode one, a module
 /// scaffolded with either convention, or hand-authored either way,
 /// must resolve the same regardless of which case the author used or
 /// which filesystem carrier itself happens to be running on.
@@ -267,7 +267,7 @@ impl CarrierToml {
 
     /// Every native code location this module actually has.
     /// `[native].path`, when set, is resolved relative to the module's
-    /// own source directory, not the project root — a module can write
+    /// own source directory, not the project root, a module can write
     /// `path = "cpp"` for one location or `path = ["cpp", "extra/src"]`
     /// for several, both resolved against that module's own source
     /// tree. Without it, this scans the whole module source tree for
@@ -289,12 +289,11 @@ impl CarrierToml {
 
     /// `native` is `Some((lang, backend))` when `carrier init` was run
     /// with `--native`. `path` is written relative to the module's own
-    /// source directory — matching how `resolve_native_dirs()` now
-    /// resolves it — not the project root.
+    /// source directory, matching how `resolve_native_dirs()` now
+    /// resolves it, not the project root.
     pub fn default_template(name: &str, native: Option<(NativeLang, Option<Backend>)>) -> String {
         let native_block = match native {
             Some((lang, backend)) => {
-                let dir_name = carrier_native::scaffold::native_dir_name(lang);
                 let build_deps_line = match lang {
                     NativeLang::Cpp => match backend.unwrap_or_default() {
                         Backend::Rcpp => "build_deps = { Rcpp = \"*\" }".to_string(),
@@ -304,11 +303,11 @@ impl CarrierToml {
                 };
                 format!(
                     r#"[native]
-# Only needed if native code doesn't live in the default location
-# (src/ under this module's source dir), or if `src/Makevars`
-# references headers from another R package (e.g. Rcpp).
-path = "{dir_name}/"
-# path can also be an array: path = ["{dir_name}/", "extra/src"]
+# Native code is auto-detected under this module's source dir, no
+# path needed for the default src/ layout. Only set path if compiled
+# code lives somewhere else, or in more than one place.
+# path = "native/"
+# path can also be an array: path = ["native/", "extra/src"]
 {build_deps_line}
 # build_deps is resolved and installed before compiling.
 # Does not imply a runtime dependency; list in [package_deps]
