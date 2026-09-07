@@ -1,10 +1,11 @@
 use anyhow::{bail, Context, Result};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
 use ::tar::Archive as TarArchive;
-use crate::carrier_toml::CarrierToml;
+use crate::carrier_toml::{CarrierToml, PackageDep};
 use crate::formats::tar;
 use crate::lockfile::{self, CarrierLock};
 use crate::ops::module_graph::ModuleFetcher;
@@ -170,8 +171,8 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&Carrie
     // project. A standalone .tar.gz has no project directory to read
     // one from, fall back to whatever `carrier bundle` baked into the
     // archive's manifest.json at bundle time.
-    let embedded_manifest = tar::read_manifest(tar_path)?;
-    let embedded_lock = embedded_manifest.locked_packages.clone().map(CarrierLock::from_packages);
+    let manifest = tar::read_manifest(tar_path)?;
+    let embedded_lock = manifest.locked_packages.clone().map(CarrierLock::from_packages);
     let effective_lock = lock.cloned().or(embedded_lock);
 
     let plan = match &effective_lock {
@@ -182,11 +183,7 @@ fn install_from_tar(tar_path: &PathBuf, install_deps: bool, lock: Option<&Carrie
     resolve::print_plan(&plan);
     resolve::execute_plan(&plan, !install_deps, effective_lock.as_ref())?;
 
-    let declared_dirs = embedded_manifest.native
-        .as_ref()
-        .map(|n| n.declared_dirs.clone())
-        .unwrap_or_default();
-    build_native_if_present(&module_path, &name, install_deps, &declared_dirs)?;
+    build_native_if_present(&module_path, &name, install_deps, manifest.native.as_ref())?;
 
     Ok(())
 }
@@ -368,41 +365,87 @@ fn install_from_registry(name: &str, repo: &str, _install_deps: bool) -> Result<
 /// source, so a rebuild for another platform/R version is still
 /// possible from there; only the flat installed tree is pruned.
 ///
-/// Prefers `declared_dirs` from the archive's manifest — exactly what
-/// `resolve_native_dirs()` saw at bundle time, including a respected
-/// `[native].path` override — over a filesystem scan. Falls back to
-/// `find_native_dirs` only when `declared_dirs` is empty: an archive
-/// bundled before this field existed, or one with no native code at
-/// all. A fresh bundle always carries `declared_dirs` when it has
-/// native code, so the scan path is effectively legacy-only now.
+/// Detection is purely filesystem-based (`has_native_src` via
+/// `find_native_dirs`), not keyed off the manifest's `native` field.
 ///
 /// Gated behind `install_deps`: a module's `[native].build_deps`
 /// (e.g. Rcpp) need to already be installed before `R CMD SHLIB` can
 /// find their headers, and `install_deps` is already what governs
 /// whether deps get installed at all.
 ///
-/// Known gap: `[native].build_deps` aren't folded into package
-/// resolution anywhere yet. A build dep only actually gets installed
-/// today if it's ALSO listed under `[package_deps]` by convention.
-fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool, declared_dirs: &[String]) -> Result<()> {
-    let native_dirs: Vec<PathBuf> = if declared_dirs.is_empty() {
-        carrier_native::detect::find_native_dirs(module_path)
-    } else {
-        declared_dirs.iter().map(|d| module_path.join(d)).collect()
+/// `[native].build_deps` are resolved and installed here, separately
+/// from `[package_deps]` and independent of `carrier.lock`, they're
+/// compile-time-only tooling, not a runtime dependency contract a
+/// consumer's own lock should ever need to pin. If the same package
+/// also appears in `[package_deps]` (needed at runtime too), it gets
+/// resolved twice; harmless, just a bit wasteful.
+fn build_native_if_present(
+    module_path: &PathBuf,
+    name: &str,
+    install_deps: bool,
+    native: Option<&crate::manifest::NativeManifest>,
+) -> Result<()> {
+    // Trust the manifest's declared paths when present, resolved once
+    // at bundle time via CarrierToml::resolve_native_dirs(). Falls
+    // back to a raw scan only when the manifest has none: a module
+    // with genuinely no native code, or a manifest bundled before this
+    // field existed. This is what makes install agree with compile
+    // about what a module's native code actually is.
+    let native_dirs: Vec<PathBuf> = match native.map(|n| n.declared_dirs.as_slice()) {
+        Some(paths) if !paths.is_empty() => {
+            let mut dirs = Vec::with_capacity(paths.len());
+            for p in paths {
+                let dir = module_path.join(p);
+                if !dir.is_dir() {
+                    bail!(
+                        "Manifest declares native path '{}' for '{}', but it does not exist after unpacking. \
+                         The archive may be corrupted or out of date with its own manifest.",
+                        p, name
+                    );
+                }
+                dirs.push(dir);
+            }
+            dirs
+        }
+        _ => carrier_native::detect::find_native_dirs(module_path),
     };
+ 
     if native_dirs.is_empty() {
         return Ok(());
     }
-
+ 
     if !install_deps {
         println!(
-            "  [native] {} has compiled code, build with: carrier install --install-deps",
+            " [native] {} has compiled code, build with: carrier install --install-deps",
             name
         );
         return Ok(());
     }
 
+    let build_deps: Option<BTreeMap<String, PackageDep>> = native
+        .map(|n| &n.build_deps)
+        .filter(|deps| !deps.is_empty())
+        .map(|deps| {
+            deps.iter()
+                .map(|entry| {
+                    let dep = match &entry.repo {
+                        Some(repo) => PackageDep::Extended { version: entry.version.clone(), repo: Some(repo.clone()) },
+                        None => PackageDep::Simple(entry.version.clone()),
+                    };
+                    (entry.name.clone(), dep)
+                })
+                .collect()
+        });
+
+    if let Some(deps) = build_deps {
+        println!("  Installing native build deps for '{}'...", name);
+        let plan = resolve::resolve(&Some(deps), &None)?;
+        resolve::print_plan(&plan);
+        resolve::execute_plan(&plan, false, None)?;
+    }
+ 
     let mut cleared_lib_dirs: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+ 
     for native_dir in &native_dirs {
         let target_dir = native_dir.parent().unwrap_or(module_path);
         let lib_dir = target_dir.join(".lib");
@@ -410,23 +453,23 @@ fn build_native_if_present(module_path: &PathBuf, name: &str, install_deps: bool
             std::fs::remove_dir_all(&lib_dir)
                 .with_context(|| format!("Failed to clear {}", lib_dir.display()))?;
         }
-
+ 
         let binary_name = crate::ops::compile::binary_name(native_dir, name);
-
+ 
         println!("Building native code for '{}' ({})...", name, native_dir.display());
         let outcome = carrier_native::build(target_dir, native_dir, binary_name, name)
             .with_context(|| format!("Failed to build native code for '{}' at {}", name, native_dir.display()))?;
+ 
         println!(
-            "  built: {} ({})",
+            " built: {} ({})",
             outcome.artifact_path.display(),
             if outcome.from_cache { "cached" } else { "compiled" }
         );
-
-        std::fs::remove_dir_all(native_dir).with_context(|| {
-            format!("Failed to remove native source at {}", native_dir.display())
-        })?;
+ 
+        std::fs::remove_dir_all(native_dir)
+            .with_context(|| format!("Failed to remove native source at {}", native_dir.display()))?;
     }
-
+ 
     Ok(())
 }
 
