@@ -2,6 +2,16 @@
 
 # Development version
 
+## What's fixed and changed
+
+-  `{carrier}` acknowledges `build_deps` from `[native]` in `carrier.toml`. Now, the compilation step will resolve the external dependencies right before building compiled shared objects/artifacts. 
+
+-  From the `carrier-core/` structure: 
+    
+    -  `cran/client.rs` is divided into 3 scripts
+    
+    -  `ops/install.rs` is divided into 4 scripts
+
 # v0.2.0
 
 ## What's new

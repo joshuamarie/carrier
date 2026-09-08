@@ -2,6 +2,10 @@ use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
 use crate::carrier_toml::CarrierToml;
+use crate::cran::client::read_installed_version;
+use crate::ops::resolve;
+use crate::paths::resolve_r_lib_dir;
+use crate::version::VersionSpec;
 
 /// Compile a module's native code in place, directly into its own
 /// source directory. This tries to mirror `devtools::load_all()`'s
@@ -22,6 +26,11 @@ use crate::carrier_toml::CarrierToml;
 /// Excluding this dev-built `lib/` from a plain source bundle is a
 /// separate, still-open concern in `formats/tar.rs` and `formats/rmbx.rs`
 /// (not handled here).
+///
+/// Resolves and installs `[native].build_deps` before compiling, no
+/// `--install-deps` gate since compile has none. Checks the R library
+/// dir first, same logic `install_packages` uses, so a repeat compile
+/// with deps already satisfied stays network-free.
 pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
     if !project_root.join("carrier.toml").exists() {
         bail!(
@@ -36,6 +45,30 @@ pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
 
     if native_dirs.is_empty() {
         return Ok(Vec::new());
+    }
+
+    let build_deps = toml.native.as_ref()
+        .and_then(|n| n.build_deps.clone())
+        .filter(|deps| !deps.is_empty());
+
+    if let Some(deps) = build_deps {
+        let all_satisfied = resolve_r_lib_dir()
+            .map(|r_lib| {
+                deps.iter().all(|(pkg_name, dep)| {
+                    let desc_path = r_lib.join(pkg_name).join("DESCRIPTION");
+                    let Ok(installed) = read_installed_version(&desc_path) else { return false };
+                    let Ok(spec) = VersionSpec::parse(dep.version()) else { return false };
+                    spec.matches(&installed)
+                })
+            })
+            .unwrap_or(false);
+
+        if !all_satisfied {
+            println!("Installing native build deps for '{}'...", name);
+            let plan = resolve::resolve(&Some(deps), &None)?;
+            resolve::print_plan(&plan);
+            resolve::execute_plan(&plan, false, None)?;
+        }
     }
 
     let mut cleared_lib_dirs: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
