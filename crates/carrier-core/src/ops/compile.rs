@@ -27,21 +27,10 @@ use crate::version::VersionSpec;
 /// separate, still-open concern in `formats/tar.rs` and `formats/rmbx.rs`
 /// (not handled here).
 ///
-/// Resolves and installs `[native].build_deps` before compiling, same
-/// as `install`'s `build_native_if_present`. No `--install-deps`-style
-/// gate: unlike install, there's no separate dev-loop flag to hang
-/// that behind, and a `carrier compile` that fails on a missing Rcpp
-/// with no attempt to fix it is worse than one that costs an extra
-/// check.
-///
-/// Checks each build dep against what's already in the R library
-/// directory first, via the same `DESCRIPTION`-reading logic
-/// `install_packages` itself uses to decide "already satisfied". Only
-/// when something is actually missing or out of spec does this fall
-/// through to `resolve::resolve`/`execute_plan`, which is what
-/// triggers a CRAN index fetch. This is what keeps a repeat
-/// `carrier compile` on an already-set-up machine network-free, the
-/// same as it was before build_deps were wired in here at all.
+/// Resolves and installs `[native].build_deps` before compiling, no
+/// `--install-deps` gate since compile has none. Checks the R library
+/// dir first, same logic `install_packages` uses, so a repeat compile
+/// with deps already satisfied stays network-free.
 pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
     if !project_root.join("carrier.toml").exists() {
         bail!(

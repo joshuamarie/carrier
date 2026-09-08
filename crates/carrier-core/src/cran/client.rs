@@ -345,11 +345,8 @@ fn resolve_install_set(
 
 /// Read the installed version of a package from its `DESCRIPTION` file.
 ///
-/// `pub(crate)` rather than private: `ops/compile.rs` reuses this
-/// directly to check whether `[native].build_deps` are already
-/// satisfied locally, before paying for a CRAN index fetch through
-/// `resolve_all`. Keeping one copy here means that check can't drift
-/// out of sync with what `install_packages` itself considers
+/// `pub(crate)`: reused by `ops/compile.rs`'s local-satisfied check,
+/// so it can't drift from what `install_packages` itself considers
 /// "already satisfied".
 pub(crate) fn read_installed_version(desc_path: &Path) -> Result<Version> {
     let content = std::fs::read_to_string(desc_path)
