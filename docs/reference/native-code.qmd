@@ -67,10 +67,10 @@ build_deps = { Rcpp = "*" }
 
     When `path` isn't set, `{carrier}` scans the module's whole source tree and treats every qualifying directory as its own native dir (see below). Also, when `src/` is named, the name of the compiled artifact comes from the name of the module. 
 
--   `build_deps` configures external dependencies, most commonly R packages, needed only to *compile* (e.g. `Rcpp`, `cpp11`, whatever `Makevars` needs via `system.file()`). This does not imply a runtime dependency. If the compiled code also needs the package loaded at runtime, list it in `[package_deps]` too.
+-   `build_deps` configures external dependencies, most commonly R packages, needed only to *compile* (e.g. `{Rcpp}`, `{cpp11}`, whatever `Makevars` needs via `system.file()`). If the compiled code also needs external packages loaded at runtime, list them in `build_deps`.
 
-    ::: callout-warning
-    `build_deps` are not yet folded into the ordinary package-resolution plan. Today they are only installed if they also appear under `[package_deps]`.
+    ::: {.callout-warning collapse="true"}
+    As of version <next-version>, `build_deps` are folded into the ordinary package-resolution plan. Previously they are only installed if they also appear under `[package_deps]`.
     :::
 
 ## Directory conventions {#directory-conventions}
