@@ -2,6 +2,8 @@
 
 # Development version
 
+# v0.2.1
+
 ## What's fixed and changed
 
 -  `{carrier}` acknowledges `build_deps` from `[native]` in `carrier.toml`. Now, the compilation step will resolve the external dependencies right before building compiled shared objects/artifacts. 
