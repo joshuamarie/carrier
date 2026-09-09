@@ -3,13 +3,13 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use anyhow::{bail, Context, Result};
 use semver::Version;
 
-use crate::cran::packages::{fetch, fetch_archive_versions, PackageRecord};
+use crate::cran::packages::{fetch, fetch_archive_versions, PackageRecord, RVersion};
 use crate::lockfile::CarrierLock;
 use crate::ops::resolve::ResolvedPackage;
 use crate::version::VersionSpec;
 
 pub(super) struct ResolvedInstall {
-    pub(super) version: Version,
+    pub(super) version: RVersion,
     pub(super) repo: String,
 }
 
@@ -117,7 +117,10 @@ pub(super) fn resolve_all(
                     }
 
                     globally_resolved.insert(name.clone(), (version.clone(), repo.clone()));
-                    to_install.insert(name.clone(), ResolvedInstall { version, repo: repo.clone() });
+                    to_install.insert(name.clone(), ResolvedInstall {
+                        version: RVersion::synthetic(version),
+                        repo: repo.clone(),
+                    });
                 }
                 None => {
                     unlocked.insert(name.clone(), spec.clone());
@@ -128,7 +131,7 @@ pub(super) fn resolve_all(
         if !unlocked.is_empty() {
             let resolved = resolve_install_set(&unlocked, &index, repo, &mut globally_resolved)?;
             for (name, r) in &resolved {
-                globally_resolved.insert(name.clone(), (r.version.clone(), r.repo.clone()));
+                globally_resolved.insert(name.clone(), (r.version.semver().clone(), r.repo.clone()));
             }
             to_install.extend(resolved);
         }
@@ -216,7 +219,7 @@ fn resolve_install_set(
             // this package lives.
             if direct.contains(pkg) {
                 resolved.insert(pkg.clone(), ResolvedInstall {
-                    version: existing_version.clone(),
+                    version: RVersion::synthetic(existing_version.clone()),
                     repo: repo_url.to_owned(),
                 });
             }
@@ -234,7 +237,7 @@ fn resolve_install_set(
             }
         };
 
-        if VersionSpec::resolve(pkg_specs, std::slice::from_ref(&record.version)).is_some() {
+        if VersionSpec::resolve(pkg_specs, std::slice::from_ref(record.version.semver())).is_some() {
             resolved.insert(pkg.clone(), ResolvedInstall {
                 version: record.version.clone(),
                 repo: repo_url.to_owned(),
@@ -245,11 +248,15 @@ fn resolve_install_set(
         println!(" [checking] {} — index version doesn't satisfy constraints, searching archive...", pkg);
         let archive_versions = fetch_archive_versions(repo_url, pkg)
             .with_context(|| format!("fetching archive versions for '{}'", pkg))?;
+        let archive_semvers: Vec<Version> = archive_versions.iter().map(|v| v.semver().clone()).collect();
 
-        match VersionSpec::resolve(pkg_specs, &archive_versions) {
-            Some(v) => {
+        match VersionSpec::resolve(pkg_specs, &archive_semvers) {
+            Some(matched_semver) => {
+                let matched = archive_versions.iter()
+                    .find(|v| v.semver() == matched_semver)
+                    .expect("matched_semver came from archive_semvers, which is a 1:1 map of archive_versions");
                 resolved.insert(pkg.clone(), ResolvedInstall {
-                    version: v.clone(),
+                    version: matched.clone(),
                     repo: repo_url.to_owned(),
                 });
             }

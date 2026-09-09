@@ -17,9 +17,56 @@ const BASE_PACKAGES: &[&str] = &[
     "spatial", "survival",
 ];
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RVersion {
+    raw: String,
+    semver: Version,
+}
+
+impl RVersion {
+    /// The one place a CRAN-style version string becomes a value. Used
+    /// for every version that comes from PACKAGES.gz, a CRAN Archive
+    /// listing, or a package's own installed DESCRIPTION, so all three
+    /// normalize identically instead of drifting into their own
+    /// slightly-different parsing.
+    pub fn parse(raw: &str) -> Result<Self> {
+        let semver = Version::parse(&normalize_r_version(raw))
+            .with_context(|| format!("Failed to parse version: {raw}"))?;
+        Ok(Self { raw: raw.to_owned(), semver })
+    }
+
+    /// A version with no real raw string behind it, e.g. reused across
+    /// a repo boundary where only the parsed `Version` survived. Falls
+    /// back to `Version`'s own `Display`, which round-trips correctly
+    /// for ordinary 3-component versions but not for anything that
+    /// went through the dash-as-pre-release reshaping in
+    /// `normalize_r_version` — that's a real, disclosed gap, not a
+    /// silent one.
+    pub fn synthetic(semver: Version) -> Self {
+        let raw = semver.to_string();
+        Self { raw, semver }
+    }
+
+    /// The exact string as published. Use this, never `Display` on the
+    /// `semver::Version`, when building a CRAN URL or filename.
+    pub fn as_str(&self) -> &str {
+        &self.raw
+    }
+
+    pub fn semver(&self) -> &Version {
+        &self.semver
+    }
+}
+
+impl std::fmt::Display for RVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.raw)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PackageRecord {
-    pub version: Version,
+    pub version: RVersion,
     pub deps: Vec<(String, String)>,
 }
 
@@ -72,7 +119,7 @@ pub fn fetch(repo_url: &str) -> Result<HashMap<String, PackageRecord>> {
 /// This fetches all archived versions of a package from CRAN's Archive/ HTML index.
 /// Returns versions sorted newest-first. An empty result (rather than an
 /// error) means the package simply has no archive (not every package does).
-pub fn fetch_archive_versions(repo_url: &str, pkg: &str) -> Result<Vec<Version>> {
+pub fn fetch_archive_versions(repo_url: &str, pkg: &str) -> Result<Vec<RVersion>> {
     let url = format!(
         "{}/src/contrib/Archive/{}/",
         repo_url.trim_end_matches('/'),
@@ -98,7 +145,7 @@ pub fn fetch_archive_versions(repo_url: &str, pkg: &str) -> Result<Vec<Version>>
 /// links. Deliberately a simple substring scan rather than a full HTML
 /// parser. CRAN's Archive listings are consistently plain `<a href="...">`
 /// tags, so this avoids pulling in an HTML parsing dependency for one job.
-fn parse_archive_listing(html: &str, pkg: &str) -> Vec<Version> {
+fn parse_archive_listing(html: &str, pkg: &str) -> Vec<RVersion> {
     let prefix = format!("{}_", pkg);
     let mut versions = Vec::new();
 
@@ -109,12 +156,12 @@ fn parse_archive_listing(html: &str, pkg: &str) -> Vec<Version> {
         let Some(name) = href.strip_suffix(".tar.gz") else { continue };
         let Some(ver_str) = name.strip_prefix(&prefix) else { continue };
 
-        if let Ok(v) = Version::parse(&normalize_r_version(ver_str)) {
+        if let Ok(v) = RVersion::parse(ver_str) {
             versions.push(v);
         }
     }
 
-    versions.sort_by(|a, b| b.cmp(a));
+    versions.sort_by(|a, b| b.semver().cmp(a.semver()));
     versions
 }
 
@@ -199,7 +246,7 @@ fn flush(
     deps: &mut Vec<(String, String)>,
 ) {
     if let (Some(n), Some(v)) = (name.take(), version.take()) {
-        match Version::parse(&normalize_r_version(&v)) {
+        match RVersion::parse(&v) {
             Ok(parsed) => {
                 map.insert(n, PackageRecord {
                     version: parsed,

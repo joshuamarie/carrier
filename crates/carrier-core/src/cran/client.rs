@@ -7,6 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use semver::Version;
 
+use crate::cran::packages::RVersion;
 use crate::lockfile::CarrierLock;
 use crate::ops::resolve::ResolvedPackage;
 
@@ -69,7 +70,7 @@ pub fn install_packages(
                 println!(" [installing] {} {}...", pkg, resolved.version);
             }
 
-            match download_and_unpack(pkg, &resolved.version.to_string(), &resolved.repo, lib_path) {
+            match download_and_unpack(pkg, resolved.version.as_str(), &resolved.repo, lib_path) {
                 Ok(()) => {
                     println!(" [done] {} {}", pkg, resolved.version);
                 }
@@ -90,19 +91,23 @@ pub fn install_packages(
 }
 
 /// Read the installed version of a package from its `DESCRIPTION` file.
+/// Goes through the same `RVersion::parse` every other CRAN version
+/// does, rather than its own ad-hoc normalization — the previous inline
+/// `.replace('-', '.')` here produced invalid semver syntax for any
+/// package with more than 3 version components (e.g. `RcppEigen`'s
+/// `0.3.4.0.2`), so "already satisfied" silently never matched for
+/// those packages even right after a successful install.
 ///
 /// `pub(crate)`: reused by `ops/compile.rs`'s local-satisfied check,
 /// so it can't drift from what `install_packages` itself considers
 /// "already satisfied".
-pub(crate) fn read_installed_version(desc_path: &Path) -> Result<Version> {
+pub(crate) fn read_installed_version(desc_path: &Path) -> Result<RVersion> {
     let content = std::fs::read_to_string(desc_path)
         .with_context(|| format!("Failed to read DESCRIPTION at {}", desc_path.display()))?;
 
     for line in content.lines() {
         if let Some(ver_str) = line.strip_prefix("Version:") {
-            let normalized = ver_str.trim().replace('-', ".");
-            return Version::parse(&normalized)
-                .with_context(|| format!("Failed to parse installed version: {}", ver_str.trim()));
+            return RVersion::parse(ver_str.trim());
         }
     }
 
