@@ -2,6 +2,18 @@
 
 # Development version
 
+## What's fixed and changed
+
+-  Fixed a version-matching bug where a bare `*` (or any unconstrained) requirement could fail to match a real CRAN version. CRAN packages with a dash in their version (e.g. `BH`) were normalized into something that looked like an unstable pre-release to semver's matcher, which excludes pre-releases from `*` by design.
+
+-  Fixed package installs 404ing for any CRAN package whose version doesn't round-trip through `Version::to_string()` (e.g. `{BayesFactor}`'s latest `0.9.12-4.8`). The raw CRAN version string is now preserved end-to-end instead of being discarded after parsing, so download URLs are built from the real published string, not a reformatted semver value.
+
+    -  This also fixed a related bug in the "already satisfied" check: installed-package version detection used its own separate normalization that produced invalid semver syntax for any version with more than 3 components, so it silently never matched for those packages even right after a successful install.
+
+-  `carrier install` skips both `build_deps` installation and compilation entirely for a native unit when a `carrier bundle --binary` archive already ships a matching prebuilt artifact (same target triple, R version, and source hash).
+
+-  `carrier compile` now also resolves and installs `[native].build_deps` before compiling, same as `carrier install` already did. Checks the local R library first and only resolves against CRAN when something's actually missing or out of spec, so a repeat compile with `build_deps` already satisfied stays network-free.
+
 # v0.2.1
 
 ## What's fixed and changed
