@@ -58,7 +58,7 @@ pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
                     let desc_path = r_lib.join(pkg_name).join("DESCRIPTION");
                     let Ok(installed) = read_installed_version(&desc_path) else { return false };
                     let Ok(spec) = VersionSpec::parse(dep.version()) else { return false };
-                    spec.matches(&installed)
+                    spec.matches(installed.semver())
                 })
             })
             .unwrap_or(false);
