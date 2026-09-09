@@ -24,8 +24,20 @@ impl VersionSpec {
             .map_err(|e| anyhow::anyhow!("Invalid version spec {:?}: {}", s, e))
     }
 
+    /// semver excludes pre-release versions from a bare `*` by design.
+    /// normalize_r_version's dash-as-pre-release encoding makes CRAN
+    /// versions like some older packages such as `{BayesFactor}`. 
+    /// Retry with it stripped if the strict match fails because of that.
     pub fn matches(&self, v: &Version) -> bool {
-        self.0.matches(v)
+        if self.0.matches(v) {
+            return true;
+        }
+        if !v.pre.is_empty() {
+            let mut stripped = v.clone();
+            stripped.pre = semver::Prerelease::EMPTY;
+            return self.0.matches(&stripped);
+        }
+        false
     }
 
     /// Given a list of specs and candidate versions (sorted newest-first),
