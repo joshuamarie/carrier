@@ -70,7 +70,7 @@ build_deps = { Rcpp = "*" }
 -   `build_deps` configures external dependencies, most commonly R packages, needed only to *compile* (e.g. `{Rcpp}`, `{cpp11}`, whatever `Makevars` needs via `system.file()`). If the compiled code also needs external packages loaded at runtime, list them in `build_deps`.
 
     ::: {.callout-warning collapse="true"}
-    As of version <next-version>, `build_deps` are folded into the ordinary package-resolution plan. Previously they are only installed if they also appear under `[package_deps]`.
+    As of `{carrier}` version 0.2.1, `build_deps` are folded into the ordinary package-resolution plan. Previously they are only installed if they also appear under `[package_deps]`.
     :::
 
 ## Directory conventions {#directory-conventions}
