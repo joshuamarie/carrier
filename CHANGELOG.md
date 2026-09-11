@@ -2,6 +2,8 @@
 
 # Development version
 
+# v0.2.2
+
 ## What's fixed and changed
 
 -  Fixed a version-matching bug where a bare `*` (or any unconstrained) requirement could fail to match a real CRAN version. CRAN packages with a dash in their version (e.g. `BH`) were normalized into something that looked like an unstable pre-release to semver's matcher, which excludes pre-releases from `*` by design.
