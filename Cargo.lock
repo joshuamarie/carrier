@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "carrier-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "carrier-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "carrier-native",
@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "carrier-native"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "dirs",
