@@ -60,7 +60,7 @@ pak::pak("joshuamarie/box@feature/carrier-module-support")
 
 ## Requirements
 
-The idea for distributable `{box}` modules is simple, really — you just need few requirements. Similar to Python and R packages, the usual structure of `{box}`-`{carrier}` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.r` file serves as an entry point of the modules, kinda similar to how `NAMESPACE` from traditional CRAN-style packages.  
+The idea for distributable `{box}` modules is simple, really — you just need few requirements. Similar to Python and R packages, the usual structure of `{box}`-`{carrier}` modules ALWAYS has the metadata called `carrier.toml`, and analogue of `DESCRIPTION` of R packages or `pyproject.toml` of Python packages. Then, the `__init__.r` file serves as an entry point of the modules. You need this as it is similar to `NAMESPACE` from traditional CRAN-style packages.  
 
 Here's an example structure of the module: 
 
