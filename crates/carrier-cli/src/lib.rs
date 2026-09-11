@@ -66,7 +66,13 @@ enum Commands {
     /// runs during `install`.
     Compile {
         /// Path to the project root (e.g. `.` or `./my-project`)
+        #[arg(default_value = ".")]
         path: String,
+        
+        /// Evict this module's cached artifacts before compiling, so
+        /// the build can't short-circuit into a stale cache hit
+        #[arg(long)]
+        clean: bool,
     },
 
     /// Install a module from a .tar.gz, GitHub (gh:user/repo), or

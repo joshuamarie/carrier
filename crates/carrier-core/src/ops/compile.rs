@@ -31,7 +31,7 @@ use crate::version::VersionSpec;
 /// `--install-deps` gate since compile has none. Checks the R library
 /// dir first, same logic `install_packages` uses, so a repeat compile
 /// with deps already satisfied stays network-free.
-pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
+pub fn run(project_root: &Path, clean: bool) -> Result<Vec<CompiledArtifact>> {
     if !project_root.join("carrier.toml").exists() {
         bail!(
             "No carrier.toml found in {}. Is this a carrier module project?",
@@ -45,6 +45,11 @@ pub fn run(project_root: &Path) -> Result<Vec<CompiledArtifact>> {
 
     if native_dirs.is_empty() {
         return Ok(Vec::new());
+    }
+
+    if clean {
+        carrier_native::cache::clear_module_cache(&name)
+            .with_context(|| format!("Failed to clear native build cache for '{}'", name))?;
     }
 
     let build_deps = toml.native.as_ref()
