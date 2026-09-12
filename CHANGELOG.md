@@ -2,6 +2,16 @@
 
 # Development version
 
+## Breaking Changes
+
+-  `carrier compile --clean` flag now evicts a module's cached compiled native codes from `~/.carrier/native-cache/` before compiling, so a stale cache hit can't mask a real rebuild. 
+
+    -  Note: `.lib/` was already cleared on every compile call regardless. `--clean` closes the remaining gap where the global cache could quietly repopulate it with the same binary.
+
+-  As of this version, `carrier compile` is the only command that doesn't need `<path>` to be supplied. 
+
+    -  You are allowed to run either `carrier compile .` or just `carrier compile`, given the current directory is the root directory of the project where `carrier.toml` lives. 
+
 # v0.2.2
 
 ## What's fixed and changed
